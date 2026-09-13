@@ -42,7 +42,7 @@ if st.button("Validar Cobertura", type="primary"):
     """
     df_regla = pd.read_sql_query(query, conn, params=(int(id_os), int(id_med)))
     
-    if not df_regla.empty():
+    if not df_regla.empty:
         st.success("✅ Cobertura Autorizada")
         
         # Tarjetas visuales para los datos principales
