@@ -2,62 +2,79 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 
-# Configuración básica de la página
-st.set_page_config(page_title="Asistente de Farmacia", page_icon="💊", layout="centered")
+# Configuración de la página
+st.set_page_config(
+    page_title="El Asistente de Farmacia",
+    page_icon="💊",
+    layout="centered"
+)
 
-st.title("💊 Validador de Cobertura Farmacéutica")
-st.markdown("Consulta rápida de normativas, coberturas y alertas epidemiológicas.")
+# Encabezado y Escudo Legal
+st.title("💊 El Asistente de Farmacia")
+st.warning("⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva del profesional de mostrador.")
 
-# Función para conectar a la base de datos (pip install streamlit)
-@st.cache_resource
-def crear_conexion():
-    return sqlite3.connect('asistente_farmacia.db', check_same_thread=False)
+# Función para extraer los datos de SQLite
+@st.cache_data 
+def cargar_datos():
+    conexion = sqlite3.connect('asistente_farmacia.db')
+    consulta = """
+    SELECT 
+        o.nombre_os AS 'Obra Social', 
+        m.nombre_droga AS 'Medicamento', 
+        r.cobertura_porcentaje AS 'Cobertura (%)', 
+        r.requiere_token AS 'Requiere Token', 
+        r.tope_envases AS 'Tope de Envases', 
+        r.requisito_observacion AS 'Requisitos Extras'
+    FROM regla_validacion r
+    JOIN obra_social o ON r.id_obra_social = o.id_obra_social
+    JOIN medicamento m ON r.id_medicamento = m.id_medicamento
+    """
+    df = pd.read_sql_query(consulta, conexion)
+    conexion.close()
+    return df
 
-conn = crear_conexion()
+df_normativas = cargar_datos()
 
-# Extraemos los datos para armar los menús desplegables
-df_obras_sociales = pd.read_sql_query("SELECT id_obra_social, nombre_os FROM obra_social", conn)
-df_medicamentos = pd.read_sql_query("SELECT id_medicamento, nombre_droga FROM medicamento ORDER BY nombre_droga", conn)
-
-st.subheader("🔍 Consulta de Vademécum")
+# Interfaz de Búsqueda
+st.subheader("Buscador de Normativas")
 col1, col2 = st.columns(2)
 
 with col1:
-    os_elegida = st.selectbox("Obra Social", df_obras_sociales['nombre_os'])
+    lista_obras_sociales = df_normativas['Obra Social'].unique()
+    os_seleccionada = st.selectbox("Seleccione la Obra Social:", options=["-"] + list(lista_obras_sociales))
 
 with col2:
-    droga_elegida = st.selectbox("Droga / Principio Activo", df_medicamentos['nombre_droga'])
+    lista_medicamentos = df_normativas['Medicamento'].unique()
+    droga_seleccionada = st.selectbox("Seleccione el Medicamento:", options=["-"] + list(lista_medicamentos))
 
-# Botón de validación
-if st.button("Validar Cobertura", type="primary"):
-    # Obtenemos los IDs reales basados en la selección del usuario
-    id_os = df_obras_sociales.loc[df_obras_sociales['nombre_os'] == os_elegida, 'id_obra_social'].iloc[0]
-    id_med = df_medicamentos.loc[df_medicamentos['nombre_droga'] == droga_elegida, 'id_medicamento'].iloc[0]
+# Lógica de Filtrado y Resultados (con corrección de sintaxis empty)
+if os_seleccionada != "-" and droga_seleccionada != "-":
+    resultado = df_normativas[
+        (df_normativas['Obra Social'] == os_seleccionada) & 
+        (df_normativas['Medicamento'] == droga_seleccionada)
+    ]
     
-    # Consultamos la regla de negocio
-    query = """
-    SELECT cobertura_porcentaje, requiere_token, tope_envases, requisito_observacion 
-    FROM regla_validacion 
-    WHERE id_obra_social = ? AND id_medicamento = ?
-    """
-    df_regla = pd.read_sql_query(query, conn, params=(int(id_os), int(id_med)))
+    st.divider()
     
-    if not df_regla.empty:
-        st.success("✅ Cobertura Autorizada")
+    if not resultado.empty:
+        st.success(f"✅ Normativa encontrada para **{droga_seleccionada}** por **{os_seleccionada}**")
         
-        # Tarjetas visuales para los datos principales
-        metrica1, metrica2, metrica3 = st.columns(3)
-        metrica1.metric(label="Cobertura", value=f"{df_regla['cobertura_porcentaje'].iloc[0]}%")
-        metrica2.metric(label="Tope Envases", value=f"{df_regla['tope_envases'].iloc[0]}")
-        metrica3.metric(label="Requiere Token", value=f"{df_regla['requiere_token'].iloc[0]}")
+        m1, m2, m3 = st.columns(3)
+        m1.metric(label="Cobertura", value=f"{resultado.iloc[0]['Cobertura (%)']}%")
+        m2.metric(label="Tope Envases", value=resultado.iloc[0]['Tope de Envases'])
+        m3.metric(label="Requiere Token", value=resultado.iloc[0]['Requiere Token'])
         
-        st.info(f"**Requisitos y Observaciones:** {df_regla['requisito_observacion'].iloc[0]}")
+        observacion = resultado.iloc[0]['Requisitos Extras']
+        st.info(f"📋 **Requisitos de Auditoría:** \n\n {observacion}")
+        
     else:
-        st.error("❌ El medicamento seleccionado NO posee cobertura para esta Obra Social o se encuentra fuera de vademécum.")
+        st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}** en la base de datos actual.")
 
 st.divider()
 
-# Módulo de Alertas Sanitarias
+# Módulo de Alertas Sanitarias ANMAT
 st.subheader("⚠️ Alertas ANMAT Activas")
-df_alertas = pd.read_sql_query("SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat", conn)
+conexion_anmat = sqlite3.connect('asistente_farmacia.db')
+df_alertas = pd.read_sql_query("SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat", conexion_anmat)
+conexion_anmat.close()
 st.dataframe(df_alertas, use_container_width=True, hide_index=True)
