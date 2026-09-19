@@ -47,12 +47,13 @@ with col2:
     lista_medicamentos = df_normativas['Medicamento'].unique()
     droga_seleccionada = st.selectbox("Seleccione el Medicamento:", options=["-"] + list(lista_medicamentos))
 
-# Lógica de Filtrado y Resultados (con corrección de sintaxis empty)
+# Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 if os_seleccionada != "-" and droga_seleccionada != "-":
     resultado = df_normativas[
-        (df_normativas['Obra Social'] == os_seleccionada) & 
-        (df_normativas['Medicamento'] == droga_seleccionada)
+        (df_normativas['Obra Social'].str.lower() == os_seleccionada.lower()) & 
+        (df_normativas['Medicamento'].str.lower() == droga_seleccionada.lower())
     ]
+
     
     st.divider()
     
