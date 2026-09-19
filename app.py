@@ -46,6 +46,9 @@ with col1:
 with col2:
     lista_medicamentos = df_normativas['Medicamento'].unique()
     droga_seleccionada = st.selectbox("Seleccione el Medicamento:", options=["-"] + list(lista_medicamentos))
+     # 🔗 Botón agregado para verificación directa en el sitio oficial
+
+st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
 
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 if os_seleccionada != "-" and droga_seleccionada != "-":
@@ -68,8 +71,7 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
         observacion = resultado.iloc[0]['Requisitos Extras']
         st.info(f"📋 **Requisitos de Auditoría:** \n\n {observacion}")
 
-        # 🔗 Botón agregado para verificación directa en el sitio oficial
-        st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
+       
         
     else:
         st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}** en la base de datos actual.")
