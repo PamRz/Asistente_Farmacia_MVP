@@ -24,7 +24,8 @@ def cargar_datos():
         r.cobertura_porcentaje AS 'Cobertura (%)', 
         r.requiere_token AS 'Requiere Token', 
         r.tope_envases AS 'Tope de Envases', 
-        r.requisito_observacion AS 'Requisitos Extras'
+        r.requisito_observacion AS 'Requisitos Extras',
+        r.fecha_carga AS 'Fecha de Carga'
     FROM regla_validacion r
     JOIN obra_social o ON r.id_obra_social = o.id_obra_social
     JOIN medicamento m ON r.id_medicamento = m.id_medicamento
@@ -46,8 +47,8 @@ with col1:
 with col2:
     lista_medicamentos = df_normativas['Medicamento'].unique()
     droga_seleccionada = st.selectbox("Seleccione el Medicamento:", options=["-"] + list(lista_medicamentos))
-     # 🔗 Botón agregado para verificación directa en el sitio oficial
-
+    
+# 🔗 Botón agregado para verificación directa en el sitio oficial
 st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
 
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
@@ -57,7 +58,6 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
         (df_normativas['Medicamento'].str.lower() == droga_seleccionada.lower())
     ]
 
-    
     st.divider()
     
     if not resultado.empty:
@@ -71,7 +71,9 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
         observacion = resultado.iloc[0]['Requisitos Extras']
         st.info(f"📋 **Requisitos de Auditoría:** \n\n {observacion}")
 
-       
+        # 🕒 Visualización de la fecha de actualización (Cumplimiento de HU-07)
+        fecha_registro = resultado.iloc[0]['Fecha de Carga']
+        st.caption(f"📅 **Última actualización de esta normativa en el sistema:** {fecha_registro}")
         
     else:
         st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}** en la base de datos actual.")
