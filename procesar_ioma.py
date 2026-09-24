@@ -1,77 +1,88 @@
 import json
 import pandas as pd
 import sqlite3
+import numpy as np
 
-print("⏳ Procesando el Vademécum de IOMA...")
+print("⏳ Analizando y recalculando el Vademécum de IOMA...")
 
-# 1. Abrimos el archivo JSON que acabas de descargar
+# 1. Cargamos el JSON
 with open('ioma_datos.json', 'r', encoding='utf-8') as f:
     datos_crudos = json.load(f)
 
 lista_datos = datos_crudos.get('data', datos_crudos)
 df_ioma = pd.DataFrame(lista_datos)
-
-# Normalizamos las columnas a minúsculas para trabajar más fácil
 df_ioma.columns = df_ioma.columns.str.lower()
 
-# 2. Limpieza de datos (Actualizado a los nombres reales del JSON)
-col_droga = 'principio_activo'  # Antes buscábamos 'droga'
-col_cobertura = 'nueva_cobertura'  # Antes buscábamos 'cobertura'
+# 2. Conversión segura de precios (por si vienen con comas en vez de puntos)
+def limpiar_numero(valor):
+    try:
+        # Convertimos a string, cambiamos comas por puntos y quitamos símbolos raros
+        val_str = str(valor).replace('$', '').replace('.', '').replace(',', '.')
+        return float(val_str)
+    except:
+        return 0.0
 
-if col_droga in df_ioma.columns and col_cobertura in df_ioma.columns:
-    # Limpiamos el porcentaje si viene como texto
-    df_ioma['cobertura_num'] = df_ioma[col_cobertura].astype(str).str.replace('%', '', regex=False).str.strip()
-    df_ioma['cobertura_num'] = pd.to_numeric(df_ioma['cobertura_num'], errors='coerce').fillna(0).astype(int)
+df_ioma['precio_venta_num'] = df_ioma['precio_venta'].apply(limpiar_numero)
+df_ioma['monto_ioma_num'] = df_ioma['nuevo_monto_ioma'].apply(limpiar_numero)
 
-    # Agrupamos por principio activo y nos quedamos con el máximo porcentaje de cobertura
-    df_agrupado = df_ioma.groupby(col_droga)['cobertura_num'].max().reset_index()
+# 3. EL CÁLCULO MÁGICO: (Monto IOMA / Precio Venta) * 100
+# Usamos np.where para evitar dividir por cero
+df_ioma['cobertura_calculada'] = np.where(
+    df_ioma['precio_venta_num'] > 0, 
+    (df_ioma['monto_ioma_num'] / df_ioma['precio_venta_num']) * 100, 
+    0
+)
 
-    # 3. Conexión a la base de datos local
-    conn = sqlite3.connect('asistente_farmacia.db')
-    cursor = conn.cursor()
+# Redondeamos al número entero más cercano
+df_ioma['cobertura_real'] = df_ioma['cobertura_calculada'].round().astype(int)
 
-    # Obtenemos el ID de la obra social IOMA
-    cursor.execute("SELECT id_obra_social FROM obra_social WHERE nombre_os = 'IOMA'")
-    id_ioma = cursor.fetchone()[0]
+# Agrupamos por principio activo sacando el porcentaje MÁXIMO real
+df_agrupado = df_ioma.groupby('principio_activo')['cobertura_real'].max().reset_index()
 
-    drogas_nuevas = 0
-    reglas_nuevas = 0
+# 4. Actualización Quirúrgica de la Base de Datos
+conn = sqlite3.connect('asistente_farmacia.db')
+cursor = conn.cursor()
 
-    # 4. Inserción masiva
-    for index, row in df_agrupado.iterrows():
-        nombre_droga = str(row[col_droga]).strip().lower()
-        cobertura_max = row['cobertura_num']
-        
-        # Evitar drogas vacías
-        if not nombre_droga or nombre_droga == 'nan':
-            continue
+# Obtenemos el ID de IOMA
+cursor.execute("SELECT id_obra_social FROM obra_social WHERE nombre_os = 'IOMA'")
+id_ioma = cursor.fetchone()[0]
 
-        # Verificamos si la droga ya existe en el catálogo (ej: cargada previamente por PAMI)
-        cursor.execute("SELECT id_medicamento FROM medicamento WHERE LOWER(nombre_droga) = ?", (nombre_droga,))
-        resultado = cursor.fetchone()
-        
-        if resultado:
-            id_med = resultado[0]
-        else:
-            # Si no existe, la agregamos
-            cursor.execute("INSERT INTO medicamento (nombre_droga) VALUES (?)", (nombre_droga.capitalize(),))
-            id_med = cursor.lastrowid
-            drogas_nuevas += 1
-            
-        # Verificamos si ya existe la regla para evitar duplicados
-        cursor.execute("SELECT id_regla FROM regla_validacion WHERE id_obra_social = ? AND id_medicamento = ?", (id_ioma, id_med))
-        if not cursor.fetchone():
-            observacion = f"Cobertura máxima registrada: {cobertura_max}%. Puede variar según marca y presentación. Consultar en portal oficial para el producto específico."
-            cursor.execute("""
-                INSERT INTO regla_validacion 
-                (id_obra_social, id_medicamento, cobertura_porcentaje, requiere_token, tope_envases, requisito_observacion) 
-                VALUES (?, ?, ?, 'NO', 2, ?)
-            """, (id_ioma, id_med, cobertura_max, observacion))
-            reglas_nuevas += 1
+print("🧹 Limpiando registros anteriores de IOMA para evitar duplicados...")
+cursor.execute("DELETE FROM regla_validacion WHERE id_obra_social = ?", (id_ioma,))
 
-    conn.commit()
-    conn.close()
+drogas_procesadas = 0
+reglas_insertadas = 0
 
-    print(f"✅ ¡Base de datos actualizada! Se insertaron {drogas_nuevas} drogas nuevas y {reglas_nuevas} normativas de IOMA.")
-else:
-    print(f"❌ No se encontraron las columnas esperadas. Columnas del archivo: {df_ioma.columns.tolist()}")
+print("📥 Insertando datos recalculados con fecha de actualización...")
+for index, row in df_agrupado.iterrows():
+    nombre_droga = str(row['principio_activo']).strip().lower()
+    cobertura_max = row['cobertura_real']
+    
+    if not nombre_droga or nombre_droga == 'nan' or cobertura_max == 0:
+        continue # Saltamos errores o drogas sin cobertura real
+
+    # Aseguramos que la droga exista
+    cursor.execute("SELECT id_medicamento FROM medicamento WHERE LOWER(nombre_droga) = ?", (nombre_droga,))
+    resultado = cursor.fetchone()
+    
+    if resultado:
+        id_med = resultado[0]
+    else:
+        cursor.execute("INSERT INTO medicamento (nombre_droga) VALUES (?)", (nombre_droga.capitalize(),))
+        id_med = cursor.lastrowid
+        drogas_procesadas += 1
+
+    # Insertamos la regla con LA FECHA ACTUAL incluida (datetime('now', 'localtime'))
+    observacion = f"Cobertura variable (hasta {cobertura_max}% según presentación). Verificar en portal oficial para el producto específico."
+    
+    cursor.execute("""
+        INSERT INTO regla_validacion 
+        (id_obra_social, id_medicamento, cobertura_porcentaje, requiere_token, tope_envases, requisito_observacion, fecha_carga) 
+        VALUES (?, ?, ?, 'NO', 2, ?, datetime('now', 'localtime'))
+    """, (id_ioma, id_med, cobertura_max, observacion))
+    reglas_insertadas += 1
+
+conn.commit()
+conn.close()
+
+print(f"✅ ¡Éxito total! Se recalculó toda la base. {reglas_insertadas} normativas de IOMA insertadas correctamente con sus fechas de carga.")
