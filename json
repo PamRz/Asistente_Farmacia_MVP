@@ -1,0 +1,11 @@
+curl.exe ^"https://sistemas.ioma.gba.gov.ar/vademecum/Home/GetJsonList^" ^
+  -H ^"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0^" ^
+  -H ^"Accept: */*^" ^
+  -H ^"Accept-Language: es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7^" ^
+  -H ^"Accept-Encoding: gzip, deflate, br, zstd^" ^
+  -H ^"X-Requested-With: XMLHttpRequest^" ^
+  -H ^"Connection: keep-alive^" ^
+  -H ^"Referer: https://sistemas.ioma.gba.gov.ar/vademecum/^" ^
+  -H ^"Sec-Fetch-Dest: empty^" ^
+  -H ^"Sec-Fetch-Mode: cors^" ^
+  -H ^"Sec-Fetch-Site: same-origin^"
