@@ -5,12 +5,12 @@ import pandas as pd
 # Configuración de la página
 st.set_page_config(
     page_title="El Asistente de Farmacia",
-    page_icon="💊",
-    layout="centered"
+    page_icon="🤖",
+    layout="wide"
 )
 
 # Encabezado y Escudo Legal
-st.title("💊 El Asistente de Farmacia")
+st.title("🤖 El Asistente de Farmacia")
 st.warning("⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva del profesional de mostrador.")
 
 
