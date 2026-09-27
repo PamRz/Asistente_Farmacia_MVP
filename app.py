@@ -87,8 +87,11 @@ if os_seleccionada != "-":
             else:
                 st.warning(texto_mostrar, icon="⚠️")
 
-# 3. Botón agregado para verificación directa en el sitio oficial
-st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
+# 3. Botón dinámico para verificación directa en el sitio oficial
+if os_seleccionada.upper() == "IOMA":
+    st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
+elif os_seleccionada.upper() == "PAMI":
+    st.link_button("🔗 Verificar en el Vademécum Oficial de PAMI", "https://www.pami.org.ar/vademecum")
 
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 if os_seleccionada != "-" and droga_seleccionada != "-":
@@ -102,14 +105,28 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     if not resultado.empty:
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         
-        # Seleccionamos y ordenamos las columnas que queremos mostrar en la tabla
-        columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
-        
-        # Filtramos el dataframe solo con esas columnas
-        df_mostrar = resultado[columnas_mostrar].copy()
-        
-        # Mostramos la tabla interactiva
-        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        # Filtramos la tabla si es PAMI y tiene datos vacíos
+        if os_seleccionada.upper() == "PAMI":
+            # Si todas las marcas son "-", significa que no hay datos detallados para PAMI
+            if (resultado['Marca'] == '-').all():
+                st.info("ℹ️ Para esta obra social, la cobertura se aplica al principio activo genérico. Consulte el vademécum oficial para detalles específicos de presentaciones.")
+                
+                # Opcional: mostrar al menos la cobertura máxima registrada si la hay
+                max_cobertura = resultado['Cobertura (%)'].max()
+                if max_cobertura > 0:
+                    st.metric(label="Cobertura General Estimada", value=f"{max_cobertura}%")
+                    
+            else:
+                # Si hay datos detallados, mostramos la tabla normal, filtrando filas vacías
+                df_mostrar = resultado[resultado['Marca'] != '-']
+                columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
+                st.dataframe(df_mostrar[columnas_mostrar], use_container_width=True, hide_index=True)
+                
+        else:
+            # Comportamiento normal para IOMA u otras obras sociales
+            columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
+            df_mostrar = resultado[columnas_mostrar].copy()
+            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
         
         # Mostramos los requisitos generales abajo
         observacion = resultado.iloc[0]['Requisitos Extras']
@@ -122,7 +139,7 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     else:
         st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}** en la base de datos actual.")
 
-st.divider()
+st.divider() 
 
 # Módulo de Alertas Sanitarias ANMAT
 st.subheader("⚠️ Alertas ANMAT Activas")
