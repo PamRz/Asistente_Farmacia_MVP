@@ -13,51 +13,6 @@ st.set_page_config(
 st.title("🤖 El Asistente de Farmacia")
 st.warning("⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva del profesional de mostrador.")
 
-# --- PANEL DE ADMINISTRACIÓN (Barra Lateral) ---
-st.sidebar.title("⚙️ Administración")
-password = st.sidebar.text_input("Contraseña de acceso:", type="password")
-
-# Contraseña simple para el MVP
-if password == "admin123":
-    st.sidebar.success("Acceso concedido")
-    st.sidebar.divider()
-    st.sidebar.subheader("📝 Agregar Nuevo Boletín")
-    
-    with st.sidebar.form("form_nuevo_boletin"):
-        # Conectamos para traer las obras sociales disponibles
-        conn_admin = sqlite3.connect('asistente_farmacia.db')
-        df_os = pd.read_sql_query("SELECT id_obra_social, nombre_os FROM obra_social", conn_admin)
-        conn_admin.close()
-        
-        # Diccionario para mapear el nombre con el ID internamente
-        mapa_os = dict(zip(df_os['nombre_os'], df_os['id_obra_social']))
-        
-        # Campos del formulario
-        os_seleccionada_admin = st.selectbox("Obra Social afectada:", options=list(mapa_os.keys()))
-        tipo_alerta = st.selectbox("Nivel de Alerta:", options=["informativa", "advertencia", "critica"])
-        mensaje_boletin = st.text_area("Mensaje de la normativa (Ej: Se requiere receta electrónica...):")
-        
-        btn_guardar = st.form_submit_button("Guardar Boletín")
-        
-        if btn_guardar:
-            if mensaje_boletin.strip() == "":
-                st.sidebar.error("El mensaje no puede estar vacío.")
-            else:
-                id_os = mapa_os[os_seleccionada_admin]
-                
-                # Insertamos el nuevo boletín en la base de datos
-                conn_insert = sqlite3.connect('asistente_farmacia.db')
-                cursor_insert = conn_insert.cursor()
-                cursor_insert.execute("""
-                    INSERT INTO boletin_os (id_obra_social, tipo_alerta, mensaje, fecha_vigencia)
-                    VALUES (?, ?, ?, date('now', 'localtime'))
-                """, (id_os, tipo_alerta, mensaje_boletin))
-                conn_insert.commit()
-                conn_insert.close()
-                
-                st.sidebar.success("✅ ¡Boletín guardado! Limpia la caché y recarga la página para verlo activo.")
-elif password != "":
-    st.sidebar.error("❌ Contraseña incorrecta")
 
 # Función para extraer los datos de SQLite
 @st.cache_data 
