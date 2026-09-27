@@ -13,6 +13,51 @@ st.set_page_config(
 st.title("🤖 El Asistente de Farmacia")
 st.warning("⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva del profesional de mostrador.")
 
+# --- PANEL DE ADMINISTRACIÓN (Barra Lateral) ---
+st.sidebar.title("⚙️ Administración")
+password = st.sidebar.text_input("Contraseña de acceso:", type="password")
+
+# Contraseña simple para el MVP
+if password == "admin123":
+    st.sidebar.success("Acceso concedido")
+    st.sidebar.divider()
+    st.sidebar.subheader("📝 Agregar Nuevo Boletín")
+    
+    with st.sidebar.form("form_nuevo_boletin"):
+        # Conectamos para traer las obras sociales disponibles
+        conn_admin = sqlite3.connect('asistente_farmacia.db')
+        df_os = pd.read_sql_query("SELECT id_obra_social, nombre_os FROM obra_social", conn_admin)
+        conn_admin.close()
+        
+        # Diccionario para mapear el nombre con el ID internamente
+        mapa_os = dict(zip(df_os['nombre_os'], df_os['id_obra_social']))
+        
+        # Campos del formulario
+        os_seleccionada_admin = st.selectbox("Obra Social afectada:", options=list(mapa_os.keys()))
+        tipo_alerta = st.selectbox("Nivel de Alerta:", options=["informativa", "advertencia", "critica"])
+        mensaje_boletin = st.text_area("Mensaje de la normativa (Ej: Se requiere receta electrónica...):")
+        
+        btn_guardar = st.form_submit_button("Guardar Boletín")
+        
+        if btn_guardar:
+            if mensaje_boletin.strip() == "":
+                st.sidebar.error("El mensaje no puede estar vacío.")
+            else:
+                id_os = mapa_os[os_seleccionada_admin]
+                
+                # Insertamos el nuevo boletín en la base de datos
+                conn_insert = sqlite3.connect('asistente_farmacia.db')
+                cursor_insert = conn_insert.cursor()
+                cursor_insert.execute("""
+                    INSERT INTO boletin_os (id_obra_social, tipo_alerta, mensaje, fecha_vigencia)
+                    VALUES (?, ?, ?, date('now', 'localtime'))
+                """, (id_os, tipo_alerta, mensaje_boletin))
+                conn_insert.commit()
+                conn_insert.close()
+                
+                st.sidebar.success("✅ ¡Boletín guardado! Limpia la caché y recarga la página para verlo activo.")
+elif password != "":
+    st.sidebar.error("❌ Contraseña incorrecta")
 
 # Función para extraer los datos de SQLite
 @st.cache_data 
@@ -94,6 +139,7 @@ elif os_seleccionada.upper() == "PAMI":
     st.link_button("🔗 Verificar en el Vademécum Oficial de PAMI", "https://www.pami.org.ar/vademecum")
 
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
+# Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 if os_seleccionada != "-" and droga_seleccionada != "-":
     resultado = df_normativas[
         (df_normativas['Obra Social'].str.lower() == os_seleccionada.lower()) & 
@@ -105,28 +151,11 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     if not resultado.empty:
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         
-        # Filtramos la tabla si es PAMI y tiene datos vacíos
-        if os_seleccionada.upper() == "PAMI":
-            # Si todas las marcas son "-", significa que no hay datos detallados para PAMI
-            if (resultado['Marca'] == '-').all():
-                st.info("ℹ️ Para esta obra social, la cobertura se aplica al principio activo genérico. Consulte el vademécum oficial para detalles específicos de presentaciones.")
-                
-                # Opcional: mostrar al menos la cobertura máxima registrada si la hay
-                max_cobertura = resultado['Cobertura (%)'].max()
-                if max_cobertura > 0:
-                    st.metric(label="Cobertura General Estimada", value=f"{max_cobertura}%")
-                    
-            else:
-                # Si hay datos detallados, mostramos la tabla normal, filtrando filas vacías
-                df_mostrar = resultado[resultado['Marca'] != '-']
-                columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
-                st.dataframe(df_mostrar[columnas_mostrar], use_container_width=True, hide_index=True)
-                
-        else:
-            # Comportamiento normal para IOMA u otras obras sociales
-            columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
-            df_mostrar = resultado[columnas_mostrar].copy()
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        # Como IOMA y PAMI ahora tienen el mismo nivel de detalle, unificamos la tabla
+        columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
+        df_mostrar = resultado[columnas_mostrar].copy()
+        
+        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
         
         # Mostramos los requisitos generales abajo
         observacion = resultado.iloc[0]['Requisitos Extras']
@@ -139,7 +168,7 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     else:
         st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}** en la base de datos actual.")
 
-st.divider() 
+st.divider()
 
 # Módulo de Alertas Sanitarias ANMAT
 st.subheader("⚠️ Alertas ANMAT Activas")
