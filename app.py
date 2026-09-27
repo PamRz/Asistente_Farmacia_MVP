@@ -34,9 +34,25 @@ def cargar_datos():
     conexion.close()
     return df
 
+@st.cache_data(ttl=60) # Usamos caché con tiempo de expiración corto para los boletines
+def obtener_boletines_os(nombre_os):
+    import sqlite3
+    conn = sqlite3.connect('asistente_farmacia.db')
+    cursor = conn.cursor()
+    # Hacemos un JOIN para buscar directamente por el nombre de la OS
+    cursor.execute("""
+        SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia 
+        FROM boletin_os b
+        JOIN obra_social o ON b.id_obra_social = o.id_obra_social
+        WHERE o.nombre_os = ?
+    """, (nombre_os,))
+    boletines = cursor.fetchall()
+    conn.close()
+    return boletines
+
 df_normativas = cargar_datos()
 
-# Interfaz de Búsqueda
+# 1. Interfaz de Búsqueda (Aquí definimos os_seleccionada)
 st.subheader("Buscador de Normativas")
 col1, col2 = st.columns(2)
 
@@ -47,8 +63,24 @@ with col1:
 with col2:
     lista_medicamentos = df_normativas['Medicamento'].unique()
     droga_seleccionada = st.selectbox("Seleccione el Medicamento:", options=["-"] + list(lista_medicamentos))
+
+# 2. Mostrar boletines si se seleccionó una obra social válida
+if os_seleccionada != "-":
+    boletines = obtener_boletines_os(os_seleccionada)
     
-# 🔗 Botón agregado para verificación directa en el sitio oficial
+    if boletines:
+        st.markdown("<br>", unsafe_allow_html=True) # Pequeño espacio visual
+        for tipo_alerta, mensaje, fecha in boletines:
+            texto_mostrar = f"**{mensaje}**  \n*(Vigente desde: {fecha})*"
+            
+            if tipo_alerta == 'critica':
+                st.error(texto_mostrar, icon="🚨")
+            elif tipo_alerta == 'informativa':
+                st.info(texto_mostrar, icon="ℹ️")
+            else:
+                st.warning(texto_mostrar, icon="⚠️")
+
+# 3. Botón agregado para verificación directa en el sitio oficial
 st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
 
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
