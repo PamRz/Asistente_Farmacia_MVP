@@ -13,6 +13,7 @@ st.set_page_config(
 st.title("💊 El Asistente de Farmacia")
 st.warning("⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva del profesional de mostrador.")
 
+
 # Función para extraer los datos de SQLite
 @st.cache_data 
 def cargar_datos():
@@ -25,7 +26,13 @@ def cargar_datos():
         r.requiere_token AS 'Requiere Token', 
         r.tope_envases AS 'Tope de Envases', 
         r.requisito_observacion AS 'Requisitos Extras',
-        r.fecha_carga AS 'Fecha de Carga'
+        r.fecha_carga AS 'Fecha de Carga',
+        r.presentacion AS 'Presentación',
+        r.marca_comercial AS 'Marca',
+        r.precio_venta AS 'Precio ($)',
+        r.monto_cobertura AS 'Monto OS ($)',
+        r.copago AS 'Copago ($)',
+        r.laboratorio AS 'Laboratorio'
     FROM regla_validacion r
     JOIN obra_social o ON r.id_obra_social = o.id_obra_social
     JOIN medicamento m ON r.id_medicamento = m.id_medicamento
@@ -93,17 +100,22 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     st.divider()
     
     if not resultado.empty:
-        st.success(f"✅ Normativa encontrada para **{droga_seleccionada}** por **{os_seleccionada}**")
+        st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         
-        m1, m2, m3 = st.columns(3)
-        m1.metric(label="Cobertura", value=f"{resultado.iloc[0]['Cobertura (%)']}%")
-        m2.metric(label="Tope Envases", value=resultado.iloc[0]['Tope de Envases'])
-        m3.metric(label="Requiere Token", value=resultado.iloc[0]['Requiere Token'])
+        # Seleccionamos y ordenamos las columnas que queremos mostrar en la tabla
+        columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
         
+        # Filtramos el dataframe solo con esas columnas
+        df_mostrar = resultado[columnas_mostrar].copy()
+        
+        # Mostramos la tabla interactiva
+        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        
+        # Mostramos los requisitos generales abajo
         observacion = resultado.iloc[0]['Requisitos Extras']
         st.info(f"📋 **Requisitos de Auditoría:** \n\n {observacion}")
 
-        # 🕒 Visualización de la fecha de actualización (Cumplimiento de HU-07)
+        # 🕒 Visualización de la fecha de actualización
         fecha_registro = resultado.iloc[0]['Fecha de Carga']
         st.caption(f"📅 **Última actualización de esta normativa en el sistema:** {fecha_registro}")
         
@@ -118,3 +130,4 @@ conexion_anmat = sqlite3.connect('asistente_farmacia.db')
 df_alertas = pd.read_sql_query("SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat", conexion_anmat)
 conexion_anmat.close()
 st.dataframe(df_alertas, use_container_width=True, hide_index=True)
+
