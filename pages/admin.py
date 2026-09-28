@@ -116,16 +116,34 @@ if password == "admin123":
     # ==========================================
     # PESTAÑA 3: ALERTAS ANMAT
     # ==========================================
+    
     with tab3:
         st.subheader("⚠️ Base de Datos: Alertas Sanitarias ANMAT")
         conn = sqlite3.connect('asistente_farmacia.db')
-        df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto, lote, vencimiento, accion_requerida FROM alerta_anmat", conn)
-        conn.close()
+        df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', vencimiento AS 'Vencimiento', accion_requerida AS 'Acción Requerida' FROM alerta_anmat", conn)
+        
         if df_anmat.empty:
             st.info("No hay alertas de ANMAT registradas actualmente.")
         else:
             st.dataframe(df_anmat, use_container_width=True, hide_index=True)
-
+            
+            st.markdown("### 🗑️ Eliminar Alerta Duplicada / Obsoleta")
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                # Usamos un 'key' único para que Streamlit no lo confunda con el botón de la pestaña 1
+                id_eliminar_anmat = st.number_input("Ingresa el ID de la alerta a eliminar:", min_value=0, step=1, key="del_anmat")
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Eliminar Alerta ANMAT"):
+                    if id_eliminar_anmat > 0:
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM alerta_anmat WHERE id_alerta = ?", (id_eliminar_anmat,))
+                        conn.commit()
+                        st.success(f"Alerta {id_eliminar_anmat} eliminada correctamente.")
+                        st.rerun()
+                    else:
+                        st.warning("Por favor, ingresa un ID válido.")
+        conn.close()
     # ==========================================
     # PESTAÑA 4: SIMULADOR DE MOSTRADOR
     # ==========================================
