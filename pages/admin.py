@@ -129,10 +129,16 @@ if password == "admin123":
     # ==========================================
     # PESTAÑA 4: SIMULADOR DE MOSTRADOR
     # ==========================================
+    
     with tab4:
         st.subheader("🧪 Simulador de Mostrador (Vista Previa)")
-        st.info("Simula una búsqueda exacta. Mostrará alertas Generales de la OS + Alertas Específicas de la droga.")
         
+        # NUEVO: Botón de actualización manual
+        if st.button("🔄 Actualizar Simulador"):
+            st.rerun()
+            
+        st.info("Simula una búsqueda exacta. Mostrará alertas Generales de la OS + Alertas Específicas de la droga.")
+           
         conn = sqlite3.connect('asistente_farmacia.db')
         df_os_sim = pd.read_sql_query("SELECT nombre_os FROM obra_social", conn)
         lista_os_sim = ["-"] + df_os_sim['nombre_os'].tolist()
