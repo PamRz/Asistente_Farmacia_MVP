@@ -44,7 +44,7 @@ def cargar_datos():
 #--------------------------------------------------------------------------
 # Función EVOLUCIONADA: Obtiene boletines generales + específicos
 #--------------------------------------------------------------------------
-@st.cache_data(ttl=60)
+# BORRAMOS el @st.cache_data para que busque en tiempo real
 def obtener_boletines_activos(nombre_os, nombre_droga):
     import sqlite3
     conn = sqlite3.connect('asistente_farmacia.db')
