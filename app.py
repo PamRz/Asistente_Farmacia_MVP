@@ -40,7 +40,9 @@ def cargar_datos():
     df = pd.read_sql_query(consulta, conexion)
     conexion.close()
     return df
-
+#--------------------------------------------------------------------------
+# Función para obtener boletines activos de una obra social específica
+#--------------------------------------------------------------------------
 @st.cache_data(ttl=60) # Usamos caché con tiempo de expiración corto para los boletines
 def obtener_boletines_os(nombre_os):
     import sqlite3
@@ -51,18 +53,21 @@ def obtener_boletines_os(nombre_os):
         SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia 
         FROM boletin_os b
         JOIN obra_social o ON b.id_obra_social = o.id_obra_social
-        WHERE o.nombre_os = ?
+        WHERE o.nombre_os = ? AND b.estado = 'activo'
     """, (nombre_os,))
     boletines = cursor.fetchall()
     conn.close()
     return boletines
 
+#----------------------------------------------------------
+# Carga de Datos y Configuración de la Interfaz
+#----------------------------------------------------------
 df_normativas = cargar_datos()
 
 # 1. Interfaz de Búsqueda (Aquí definimos os_seleccionada)
 st.subheader("Buscador de Normativas")
 col1, col2 = st.columns(2)
-
+# agregamos selectboxes para la obra social y el medicamento, con opción por defecto "-"
 with col1:
     lista_obras_sociales = df_normativas['Obra Social'].unique()
     os_seleccionada = st.selectbox("Seleccione la Obra Social:", options=["-"] + list(lista_obras_sociales))
@@ -87,13 +92,14 @@ if os_seleccionada != "-":
             else:
                 st.warning(texto_mostrar, icon="⚠️")
 
+#---------------------------------------------------------------------
 # 3. Botón dinámico para verificación directa en el sitio oficial
+#---------------------------------------------------------------------
 if os_seleccionada.upper() == "IOMA":
     st.link_button("🔗 Verificar en el Vademécum Oficial de IOMA", "https://sistemas.ioma.gba.gov.ar/vademecum/")
 elif os_seleccionada.upper() == "PAMI":
     st.link_button("🔗 Verificar en el Vademécum Oficial de PAMI", "https://www.pami.org.ar/vademecum")
 
-# Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 # Lógica de Filtrado y Resultados insensible a mayúsculas/minúsculas
 if os_seleccionada != "-" and droga_seleccionada != "-":
     resultado = df_normativas[
@@ -102,7 +108,7 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     ]
 
     st.divider()
-    
+   # 4. Mostrar resultados si existen 
     if not resultado.empty:
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         
