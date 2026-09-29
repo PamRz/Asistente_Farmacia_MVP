@@ -33,11 +33,11 @@ def cargar_datos():
     conexion.close()
     return df
 
-# SIN CACHÉ: Búsqueda en tiempo real
 def obtener_boletines_activos(nombre_os, nombre_droga):
     import sqlite3
     conn = sqlite3.connect('asistente_farmacia.db')
     cursor = conn.cursor()
+    # Se agrega ORDER BY CASE para forzar: Crítica (1) -> Advertencia (2) -> Informativa (3)
     cursor.execute("""
         SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia, m.nombre_droga 
         FROM boletin_os b
@@ -46,6 +46,13 @@ def obtener_boletines_activos(nombre_os, nombre_droga):
         WHERE o.nombre_os = ? 
           AND b.estado = 'activo'
           AND (m.nombre_droga = ? OR b.id_medicamento IS NULL)
+        ORDER BY 
+          CASE b.tipo_alerta 
+            WHEN 'critica' THEN 1 
+            WHEN 'advertencia' THEN 2 
+            WHEN 'informativa' THEN 3 
+            ELSE 4 
+          END
     """, (nombre_os, nombre_droga))
     boletines = cursor.fetchall()
     conn.close()
@@ -71,21 +78,30 @@ elif os_seleccionada.upper() == "PAMI":
 
 st.divider()
 
-# DOBLE CERRADURA: Solo muestra datos si se eligieron ambas opciones
 if os_seleccionada != "-" and droga_seleccionada != "-":
     
-    # 1. RENDERIZAR ALERTAS EN GRILLA DE 2 COLUMNAS
     boletines = obtener_boletines_activos(os_seleccionada, droga_seleccionada)
-    if boletines:
-        st.markdown(f"### 📢 Normativas Activas para {os_seleccionada}")
+    
+    # Separamos las alertas para distribuirlas correctamente en la interfaz
+    alertas_generales = []
+    alertas_especificas = []
+    
+    for tipo, msg, fecha, droga in boletines:
+        if droga:
+            alertas_especificas.append((tipo, msg, fecha))
+        else:
+            alertas_generales.append((tipo, msg, fecha))
+
+    # 1. RENDERIZAR ALERTAS GENERALES EN LA GRILLA SUPERIOR
+    if alertas_generales:
+        st.markdown(f"### 📢 Normativas Generales Activas para {os_seleccionada}")
         cols_alertas = st.columns(2)
         
-        for index, (tipo_alerta, mensaje, fecha, nombre_droga) in enumerate(boletines):
+        for index, (tipo_alerta, mensaje, fecha) in enumerate(alertas_generales):
             col_actual = cols_alertas[index % 2]
             
             with col_actual:
-                etiqueta_alcance = f" 📌 *(Específico para {nombre_droga})*" if nombre_droga else ""
-                texto_mostrar = f"**{mensaje}**  \n*(Vigente desde: {fecha}){etiqueta_alcance}*"
+                texto_mostrar = f"**{mensaje}**  \n*(Vigente desde: {fecha})*"
                 
                 if tipo_alerta == 'critica':
                     st.error(texto_mostrar, icon="🚨")
@@ -95,7 +111,7 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
                     st.warning(texto_mostrar, icon="⚠️")
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. RENDERIZAR CATÁLOGO
+    # 2. RENDERIZAR CATÁLOGO Y REQUISITOS CONSOLIDADOS
     resultado = df_normativas[
         (df_normativas['Obra Social'].str.lower() == os_seleccionada.lower()) & 
         (df_normativas['Medicamento'].str.lower() == droga_seleccionada.lower())
@@ -105,7 +121,19 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         columnas_mostrar = ['Marca', 'Presentación', 'Precio ($)', 'Monto OS ($)', 'Copago ($)', 'Cobertura (%)', 'Laboratorio']
         st.dataframe(resultado[columnas_mostrar].copy(), use_container_width=True, hide_index=True)
-        st.info(f"📋 **Requisitos de Auditoría:** \n\n {resultado.iloc[0]['Requisitos Extras']}")
+        
+        # Consolidación del bloque de auditoría
+        req_tecnico = resultado.iloc[0]['Requisitos Extras']
+        bloque_auditoria = f"• {req_tecnico}\n"
+        
+        if alertas_especificas:
+            bloque_auditoria += "\n**Normativas Específicas para esta droga:**\n"
+            for tipo, msg, fecha in alertas_especificas:
+                # Usamos emojis para diferenciar la gravedad dentro del texto
+                icono = "🚨" if tipo == 'critica' else "⚠️" if tipo == 'advertencia' else "ℹ️"
+                bloque_auditoria += f"{icono} {msg} *(Vigente desde: {fecha})*\n"
+
+        st.info(f"📋 **Requisitos de Auditoría:** \n\n {bloque_auditoria}")
         st.caption(f"📅 **Última actualización de catálogo:** {resultado.iloc[0]['Fecha de Carga']}")
     else:
         st.error(f"❌ El medicamento **{droga_seleccionada}** no registra cobertura bajo la obra social **{os_seleccionada}**.")
