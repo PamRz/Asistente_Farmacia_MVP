@@ -1,10 +1,11 @@
 import sqlite3
 from contextlib import closing
-
 import pandas as pd
 import streamlit as st
+from pathlib import Path # NUEVO (Punto a)
 
-DB_PATH = "asistente_farmacia.db"
+# NUEVO (Punto a): Ruta absoluta indestructible
+DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
 
 # Links a los vademécums oficiales (agregar una obra social = agregar una línea)
 VADEMECUMS = {
@@ -21,28 +22,29 @@ ESTILOS_ALERTA = {
 
 st.set_page_config(page_title="El Asistente de Farmacia", page_icon="🤖", layout="wide")
 
+# Mostramos en pantalla dónde está leyendo la base de datos
+st.caption(f"Base de datos activa en: {DB_PATH}")
+
 st.title("🤖 El Asistente de Farmacia")
 st.warning(
     "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
     "La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva "
     "del profesional de mostrador."
 )
-
-
 # ==========================================
 # ACCESO A DATOS
 # ==========================================
 def consultar(sql, params=()):
     """Ejecuta un SELECT y devuelve una lista de tuplas. La conexión siempre se cierra."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute("PRAGMA foreign_keys = ON") # NUEVO (Punto d)
         return conn.execute(sql, params).fetchall()
-
 
 def consultar_df(sql, params=()):
     """Ejecuta un SELECT y devuelve un DataFrame. La conexión siempre se cierra."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute("PRAGMA foreign_keys = ON") # NUEVO (Punto d)
         return pd.read_sql_query(sql, conn, params=params)
-
 
 # ttl=300: los datos se vuelven a leer de la base cada 5 minutos como máximo
 @st.cache_data(ttl=300)
@@ -68,7 +70,6 @@ def cargar_datos():
     """)
 
 
-@st.cache_data(ttl=300)
 def cargar_alertas_anmat():
     return consultar_df(
         "SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat"
