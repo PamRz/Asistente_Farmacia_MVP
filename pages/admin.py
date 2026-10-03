@@ -42,25 +42,32 @@ if password == "admin123":
             tipo_alerta = st.selectbox("Nivel de Alerta:", options=["informativa", "advertencia", "critica"])
             estado_alerta = st.radio("Estado de publicación:", options=["borrador", "activo"], horizontal=True)
             mensaje_boletin = st.text_area("Mensaje de la normativa:")
-            
-            btn_guardar = st.form_submit_button("Guardar Boletín")
-            
+#---------------------------------------------------------------------------
+# aqui guardamos el boletin en la base de datos
+#----------------------------------------------------------------------------
+            btn_guardar = st.form_submit_button("Guardar Boletín")    
             if btn_guardar:
                 if mensaje_boletin.strip() == "":
                     st.error("El mensaje no puede estar vacío.")
                 else:
-                    id_os = mapa_os[os_seleccionada_admin]
-                    # Determinamos si lleva ID de medicamento o NULL
-                    id_med = mapa_meds.get(med_seleccionado_admin, None) 
-                    
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO boletin_os (id_obra_social, tipo_alerta, mensaje, fecha_vigencia, estado, id_medicamento)
-                        VALUES (?, ?, ?, date('now', 'localtime'), ?, ?)
-                    """, (id_os, tipo_alerta, mensaje_boletin, estado_alerta, id_med))
-                    conn.commit()
-                    st.success("✅ ¡Boletín guardado exitosamente!")
-                    st.rerun()
+                    try:
+                        id_os = mapa_os[os_seleccionada_admin]
+                        id_med = mapa_meds.get(med_seleccionado_admin, None) 
+                        
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO boletin_os (id_obra_social, tipo_alerta, mensaje, fecha_vigencia, estado, id_medicamento)
+                            VALUES (?, ?, ?, date('now', 'localtime'), ?, ?)
+                        """, (id_os, tipo_alerta, mensaje_boletin, estado_alerta, id_med))
+                        conn.commit()
+                        st.success("✅ ¡Boletín guardado exitosamente en la base de datos! (Presiona F5 para refrescar la tabla)")
+                        
+                        # APAGAMOS EL RERUN PARA PODER LEER EL ERROR SI LO HAY
+                        # st.rerun() 
+                        
+                    except Exception as e:
+                        st.error(f"❌ ERROR CRÍTICO DE BASE DE DATOS: {e}")
+            
 
         st.divider()
         st.subheader("🗑️ Gestionar Boletines Activos y Borradores")
