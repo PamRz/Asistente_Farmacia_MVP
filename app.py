@@ -22,8 +22,6 @@ ESTILOS_ALERTA = {
 
 st.set_page_config(page_title="El Asistente de Farmacia", page_icon="🤖", layout="wide")
 
-# Mostramos en pantalla dónde está leyendo la base de datos
-st.caption(f"Base de datos activa en: {DB_PATH}")
 
 st.title("🤖 El Asistente de Farmacia")
 st.warning(
