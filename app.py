@@ -210,17 +210,43 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             f"bajo la obra social **{os_seleccionada}**."
         )
     else:
+        
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
-        st.dataframe(tabla_catalogo(resultado), width="stretch", hide_index=True)
+        
+        # Extraemos la tabla a una variable para poder manipularla
+        df_mostrar = tabla_catalogo(resultado)
+        
+        # 1. Reordenar columnas para una lectura más lógica
+        columnas_ordenadas = ['Laboratorio', 'Marca', 'Presentación', 'Cobertura (%)', 'Precio ($)', 'Monto OS ($)', 'Copago ($)']
+        columnas_finales = [col for col in columnas_ordenadas if col in df_mostrar.columns]
+        df_mostrar = df_mostrar[columnas_finales]
+
+        # 2. Buscador 100% en español
+        texto_busqueda = st.text_input("🔍 Buscar en este catálogo (Ej: Baliarda, Richmond o 500mg):", placeholder="Escribe aquí para filtrar...")
+
+        if texto_busqueda:
+            mask = df_mostrar.astype(str).apply(lambda x: x.str.contains(texto_busqueda, case=False)).any(axis=1)
+            df_filtrado = df_mostrar[mask]
+        else:
+            df_filtrado = df_mostrar
+
+        # 3. Tabla optimizada con altura máxima
+        st.dataframe(
+            df_filtrado,
+            height=350,
+            width="stretch",
+            hide_index=True
+        )
 
         requisitos = resultado["Requisitos Extras"].dropna().unique()
         if len(requisitos) > 0:
             lista = "\n".join(f"• {r}" for r in requisitos)
             st.info(f"📋 **Requisitos de Auditoría:**\n\n{lista}")
 
-        st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")
+        st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")  
+        
 
-st.divider()
+    st.divider()
 
 st.subheader("⚠️ Alertas ANMAT Activas")
 df_alertas = cargar_alertas_anmat()
