@@ -3,6 +3,7 @@ from contextlib import closing
 import pandas as pd
 import streamlit as st
 from pathlib import Path
+import base64  # <-- NUEVA LIBRERÍA PARA LEER LA IMAGEN
 
 # Ruta absoluta indestructible
 DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
@@ -20,8 +21,36 @@ ESTILOS_ALERTA = {
     "advertencia": (st.warning, "⚠️"),
 }
 
-# 1. CAMBIO DE IDENTIDAD (Punto 3: Planilla con lápiz)
+# 1. CAMBIO DE IDENTIDAD (Planilla con lápiz)
 st.set_page_config(page_title="FarmaCheck", page_icon="📝", layout="wide")
+
+# ==========================================
+# NUEVO: INYECCIÓN DE IMAGEN DE FONDO
+# ==========================================
+def agregar_fondo(ruta_imagen):
+    try:
+        with open(ruta_imagen, "rb") as f:
+            encoded_string = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background-image: url(data:image/jpeg;base64,{encoded_string});
+                background-size: cover;
+                background-position: center;
+                background-attachment: fixed;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+    except FileNotFoundError:
+        pass # Si no encuentra la imagen, la app sigue funcionando normal sin romperse
+
+# Aplicamos el fondo usando nuestra ruta absoluta indestructible
+RUTA_FONDO = Path(__file__).resolve().parent / "fondo.jpeg"
+agregar_fondo(RUTA_FONDO)
+
 
 # 2. INYECCIÓN CSS PARA AUMENTAR TAMAÑOS (Punto 2)
 st.markdown("""
@@ -177,13 +206,12 @@ with col_izq:
     if url_vademecum:
         st.link_button(f"🔗 Verificar en el Vademécum Oficial de {os_seleccionada}", url_vademecum)
 
+# 1. Cargamos alertas de la OS si hay una búsqueda activa
 if os_seleccionada != "-" and droga_seleccionada != "-":
     boletines = obtener_boletines_activos(os_seleccionada, droga_seleccionada)
-
     alertas_generales = [(t, m, f) for t, m, f, droga in boletines if not droga]
     alertas_especificas = [(t, m, f) for t, m, f, droga in boletines if droga]
 
-    # Evaluamos el catálogo acá arriba para poder sacar los requisitos (Punto 1)
     resultado = df_normativas[
         (df_normativas["Obra Social"] == os_seleccionada)
         & (df_normativas["Medicamento"] == droga_seleccionada)
@@ -194,7 +222,6 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             st.markdown(f"### 💊 Alerta para {droga_seleccionada}")
             mostrar_alertas(alertas_especificas, columnas=1)
             
-        # Requisitos de auditoría ahora se muestran inmediatamente después de las alertas
         if not resultado.empty:
             requisitos = resultado["Requisitos Extras"].dropna().unique()
             if len(requisitos) > 0:
@@ -206,11 +233,19 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             with st.expander(f"📢 Ver normativas generales de {os_seleccionada}", expanded=False):
                 mostrar_alertas(alertas_generales, columnas=1)
 
-    st.divider()
+# 2. Cargamos SIEMPRE las alertas de ANMAT en la columna derecha (debajo de las de OS)
+with col_der:
+    df_alertas = cargar_alertas_anmat()
+    with st.expander("⚠️ Ver Alertas Sanitarias ANMAT", expanded=False):
+        if df_alertas.empty:
+            st.info("No hay alertas de ANMAT registradas actualmente.")
+        else:
+            st.dataframe(df_alertas, width="stretch", hide_index=True)
 
-    # ==========================================
-    # PLANILLA CON MEDICAMENTOS
-    # ==========================================
+# 3. Finalmente, dibujamos la planilla abajo de todo, ocupando el ancho completo
+if os_seleccionada != "-" and droga_seleccionada != "-":
+    st.divider()
+    
     if resultado.empty:
         st.error(
             f"❌ El medicamento **{droga_seleccionada}** no registra cobertura "
@@ -239,14 +274,4 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             width="stretch",
             hide_index=True
         )
-
         st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")
-
-st.divider()
-
-st.subheader("⚠️ Alertas ANMAT")
-df_alertas = cargar_alertas_anmat()
-if df_alertas.empty:
-    st.info("No hay alertas de ANMAT registradas actualmente.")
-else:
-    st.dataframe(df_alertas, width="stretch", hide_index=True)
