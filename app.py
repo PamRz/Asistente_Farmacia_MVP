@@ -177,9 +177,9 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     # Ubicamos las Alertas Generales apiladas en la Columna Derecha
     with col_der:
         if alertas_generales:
-            st.markdown(f"### 📢 Alertas según {os_seleccionada}")
-            mostrar_alertas(alertas_generales, columnas=1) # columnas=1 fuerza el apilamiento vertical ("jerarquía de colores")
-
+            # st.expander crea la lista desplegable que sugeriste
+            with st.expander(f"📢 Ver normativas generales de {os_seleccionada}", expanded=False):
+                mostrar_alertas(alertas_generales, columnas=1)
     st.divider()
 
     # ==========================================
