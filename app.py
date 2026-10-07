@@ -20,10 +20,26 @@ ESTILOS_ALERTA = {
     "advertencia": (st.warning, "⚠️"),
 }
 
-# 1. CAMBIO DE IDENTIDAD A FARMACHECK
-st.set_page_config(page_title="FarmaCheck", page_icon="💊", layout="wide")
+# 1. CAMBIO DE IDENTIDAD (Punto 3: Planilla con lápiz)
+st.set_page_config(page_title="FarmaCheck", page_icon="📝", layout="wide")
 
-st.title("💊 FarmaCheck")
+# 2. INYECCIÓN CSS PARA AUMENTAR TAMAÑOS (Punto 2)
+st.markdown("""
+<style>
+/* Aumentar letra del botón del Vademécum */
+[data-testid="stLinkButton"] p {
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+}
+/* Aumentar letra del título de la lista desplegable (Expander) */
+[data-testid="stExpander"] summary p {
+    font-size: 1.15rem !important;
+    font-weight: bold !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("📝 FarmaCheck")
 st.warning(
     "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
     "La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva "
@@ -130,11 +146,10 @@ def tabla_catalogo(resultado):
     return tabla
 
 # ==========================================
-# 2. NUEVO DISEÑO: LAYOUT DE 2 COLUMNAS MAESTRAS
+# LAYOUT DE COLUMNAS MAESTRAS
 # ==========================================
 df_normativas = cargar_datos()
 
-# Creamos las dos grandes divisiones de tu dibujo
 col_izq, col_der = st.columns([1, 1])
 
 with col_izq:
@@ -168,28 +183,34 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
     alertas_generales = [(t, m, f) for t, m, f, droga in boletines if not droga]
     alertas_especificas = [(t, m, f) for t, m, f, droga in boletines if droga]
 
-    # Ubicamos las Alertas Específicas debajo del selector (Columna Izquierda)
-    with col_izq:
-        if alertas_especificas:
-            st.markdown(f"### 💊 Alerta para {droga_seleccionada}")
-            mostrar_alertas(alertas_especificas, columnas=1)
-
-    # Ubicamos las Alertas Generales apiladas en la Columna Derecha
-    with col_der:
-        if alertas_generales:
-            # st.expander crea la lista desplegable que sugeriste
-            with st.expander(f"📢 Ver normativas generales de {os_seleccionada}", expanded=False):
-                mostrar_alertas(alertas_generales, columnas=1)
-    st.divider()
-
-    # ==========================================
-    # 3. PLANILLA CON MEDICAMENTOS Y SCROLL
-    # ==========================================
+    # Evaluamos el catálogo acá arriba para poder sacar los requisitos (Punto 1)
     resultado = df_normativas[
         (df_normativas["Obra Social"] == os_seleccionada)
         & (df_normativas["Medicamento"] == droga_seleccionada)
     ]
 
+    with col_izq:
+        if alertas_especificas:
+            st.markdown(f"### 💊 Alerta para {droga_seleccionada}")
+            mostrar_alertas(alertas_especificas, columnas=1)
+            
+        # Requisitos de auditoría ahora se muestran inmediatamente después de las alertas
+        if not resultado.empty:
+            requisitos = resultado["Requisitos Extras"].dropna().unique()
+            if len(requisitos) > 0:
+                lista = "\n".join(f"• {r}" for r in requisitos)
+                st.info(f"📋 **Requisitos de Auditoría:**\n\n{lista}")
+
+    with col_der:
+        if alertas_generales:
+            with st.expander(f"📢 Ver normativas generales de {os_seleccionada}", expanded=False):
+                mostrar_alertas(alertas_generales, columnas=1)
+
+    st.divider()
+
+    # ==========================================
+    # PLANILLA CON MEDICAMENTOS
+    # ==========================================
     if resultado.empty:
         st.error(
             f"❌ El medicamento **{droga_seleccionada}** no registra cobertura "
@@ -214,15 +235,10 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
 
         st.dataframe(
             df_filtrado,
-            height=140, # ALTO REDUCIDO: Muestra aprox 3 filas y fuerza el scroll interno
+            height=140,
             width="stretch",
             hide_index=True
         )
-
-        requisitos = resultado["Requisitos Extras"].dropna().unique()
-        if len(requisitos) > 0:
-            lista = "\n".join(f"• {r}" for r in requisitos)
-            st.info(f"📋 **Requisitos de Auditoría:**\n\n{lista}")
 
         st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")
 
