@@ -2,12 +2,12 @@ import sqlite3
 from contextlib import closing
 import pandas as pd
 import streamlit as st
-from pathlib import Path # NUEVO (Punto a)
+from pathlib import Path
 
-# NUEVO (Punto a): Ruta absoluta indestructible
+# Ruta absoluta indestructible
 DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
 
-# Links a los vademécums oficiales (agregar una obra social = agregar una línea)
+# Links a los vademécums oficiales
 VADEMECUMS = {
     "IOMA": "https://sistemas.ioma.gba.gov.ar/vademecum/",
     "PAMI": "https://www.pami.org.ar/vademecum",
@@ -20,31 +20,29 @@ ESTILOS_ALERTA = {
     "advertencia": (st.warning, "⚠️"),
 }
 
-st.set_page_config(page_title="El Asistente de Farmacia", page_icon="🤖", layout="wide")
+# 1. CAMBIO DE IDENTIDAD A FARMACHECK
+st.set_page_config(page_title="FarmaCheck", page_icon="💊", layout="wide")
 
-
-st.title("🤖 El Asistente de Farmacia")
+st.title("💊 FarmaCheck")
 st.warning(
     "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
     "La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva "
     "del profesional de mostrador."
 )
+
 # ==========================================
 # ACCESO A DATOS
 # ==========================================
 def consultar(sql, params=()):
-    """Ejecuta un SELECT y devuelve una lista de tuplas. La conexión siempre se cierra."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.execute("PRAGMA foreign_keys = ON") # NUEVO (Punto d)
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn.execute(sql, params).fetchall()
 
 def consultar_df(sql, params=()):
-    """Ejecuta un SELECT y devuelve un DataFrame. La conexión siempre se cierra."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.execute("PRAGMA foreign_keys = ON") # NUEVO (Punto d)
+        conn.execute("PRAGMA foreign_keys = ON")
         return pd.read_sql_query(sql, conn, params=params)
 
-# ttl=300: los datos se vuelven a leer de la base cada 5 minutos como máximo
 @st.cache_data(ttl=300)
 def cargar_datos():
     return consultar_df("""
@@ -67,16 +65,12 @@ def cargar_datos():
         JOIN medicamento m ON r.id_medicamento = m.id_medicamento
     """)
 
-
 def cargar_alertas_anmat():
     return consultar_df(
         "SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat"
     )
 
-
-# Los boletines NO se cachean: si el administrador publica uno, debe verse enseguida
 def obtener_boletines_activos(nombre_os, nombre_droga):
-    # Orden: Crítica -> Advertencia -> Informativa
     return consultar("""
         SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia, m.nombre_droga
         FROM boletin_os b
@@ -94,9 +88,7 @@ def obtener_boletines_activos(nombre_os, nombre_droga):
           END
     """, (nombre_os, nombre_droga))
 
-
 def drogas_con_boletin_activo(nombre_os):
-    """Drogas con un boletín específico activo para esa OS (aunque no tengan catálogo)."""
     filas = consultar("""
         SELECT DISTINCT m.nombre_droga
         FROM boletin_os b
@@ -106,33 +98,26 @@ def drogas_con_boletin_activo(nombre_os):
     """, (nombre_os,))
     return [f[0] for f in filas]
 
-
 # ==========================================
 # FORMATO Y COMPONENTES VISUALES
 # ==========================================
 def formato_moneda(valor, cero_es_sin_dato=False):
-    """Devuelve '$ 1.234,50' o 's/d' si falta el dato (NULL, o 0 cuando 0 no tiene sentido)."""
     if pd.isna(valor) or (cero_es_sin_dato and valor == 0):
         return "s/d"
-    texto = f"{valor:,.2f}"  # 1,234.50 (formato US)
+    texto = f"{valor:,.2f}"
     return "$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
-
 
 def mostrar_alerta(tipo, texto):
     funcion, icono = ESTILOS_ALERTA.get(tipo, (st.warning, "⚠️"))
     funcion(texto, icon=icono)
 
-
 def mostrar_alertas(alertas, columnas=2):
-    """Dibuja una lista de alertas (tipo, mensaje, fecha) en una grilla."""
     cols = st.columns(columnas)
     for i, (tipo, mensaje, fecha) in enumerate(alertas):
         with cols[i % columnas]:
             mostrar_alerta(tipo, f"**{mensaje}**  \n*(Vigente desde: {fecha})*")
 
-
 def tabla_catalogo(resultado):
-    """Prepara el catálogo para mostrar: '0' en precio/monto significa 'sin dato'."""
     tabla = pd.DataFrame({
         "Marca": resultado["Marca"],
         "Presentación": resultado["Presentación"],
@@ -144,21 +129,18 @@ def tabla_catalogo(resultado):
     })
     return tabla
 
-
 # ==========================================
-# BUSCADOR
+# 2. NUEVO DISEÑO: LAYOUT DE 2 COLUMNAS MAESTRAS
 # ==========================================
 df_normativas = cargar_datos()
 
-st.subheader("Buscador de Normativas")
-col1, col2 = st.columns(2)
+# Creamos las dos grandes divisiones de tu dibujo
+col_izq, col_der = st.columns([1, 1])
 
-with col1:
+with col_izq:
     lista_os = sorted(df_normativas["Obra Social"].unique())
-    os_seleccionada = st.selectbox("Seleccione la Obra Social:", options=["-"] + lista_os)
+    os_seleccionada = st.selectbox("Obra Social:", options=["-"] + lista_os)
 
-with col2:
-    # Selector encadenado: solo drogas de la OS elegida (+ las que tengan un boletín activo)
     if os_seleccionada == "-":
         opciones_drogas = []
     else:
@@ -169,36 +151,40 @@ with col2:
             set(con_cobertura) | set(drogas_con_boletin_activo(os_seleccionada)),
             key=str.lower,
         )
+        
     droga_seleccionada = st.selectbox(
-        "Seleccione el Medicamento:",
+        "Medicamento:",
         options=["-"] + opciones_drogas,
         disabled=(os_seleccionada == "-"),
     )
 
-url_vademecum = VADEMECUMS.get(os_seleccionada.upper())
-if url_vademecum:
-    st.link_button(f"🔗 Verificar en el Vademécum Oficial de {os_seleccionada}", url_vademecum)
-
-st.divider()
+    url_vademecum = VADEMECUMS.get(os_seleccionada.upper())
+    if url_vademecum:
+        st.link_button(f"🔗 Verificar en el Vademécum Oficial de {os_seleccionada}", url_vademecum)
 
 if os_seleccionada != "-" and droga_seleccionada != "-":
     boletines = obtener_boletines_activos(os_seleccionada, droga_seleccionada)
 
-    # nombre_droga viene vacío (None) en los boletines generales
     alertas_generales = [(t, m, f) for t, m, f, droga in boletines if not droga]
     alertas_especificas = [(t, m, f) for t, m, f, droga in boletines if droga]
 
-    # 1. Alertas generales de la obra social
-    if alertas_generales:
-        st.markdown(f"### 📢 Normativas Generales Activas para {os_seleccionada}")
-        mostrar_alertas(alertas_generales)
+    # Ubicamos las Alertas Específicas debajo del selector (Columna Izquierda)
+    with col_izq:
+        if alertas_especificas:
+            st.markdown(f"### 💊 Alerta para {droga_seleccionada}")
+            mostrar_alertas(alertas_especificas, columnas=1)
 
-    # 2. Alertas específicas de la droga (se muestran SIEMPRE, haya o no catálogo)
-    if alertas_especificas:
-        st.markdown(f"### 💊 Normativas Específicas para {droga_seleccionada}")
-        mostrar_alertas(alertas_especificas)
+    # Ubicamos las Alertas Generales apiladas en la Columna Derecha
+    with col_der:
+        if alertas_generales:
+            st.markdown(f"### 📢 Alertas según {os_seleccionada}")
+            mostrar_alertas(alertas_generales, columnas=1) # columnas=1 fuerza el apilamiento vertical ("jerarquía de colores")
 
-    # 3. Catálogo y requisitos
+    st.divider()
+
+    # ==========================================
+    # 3. PLANILLA CON MEDICAMENTOS Y SCROLL
+    # ==========================================
     resultado = df_normativas[
         (df_normativas["Obra Social"] == os_seleccionada)
         & (df_normativas["Medicamento"] == droga_seleccionada)
@@ -210,19 +196,15 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             f"bajo la obra social **{os_seleccionada}**."
         )
     else:
-        
         st.success(f"✅ Catálogo encontrado para **{droga_seleccionada}** por **{os_seleccionada}**")
         
-        # Extraemos la tabla a una variable para poder manipularla
         df_mostrar = tabla_catalogo(resultado)
         
-        # 1. Reordenar columnas para una lectura más lógica
         columnas_ordenadas = ['Laboratorio', 'Marca', 'Presentación', 'Cobertura (%)', 'Precio ($)', 'Monto OS ($)', 'Copago ($)']
         columnas_finales = [col for col in columnas_ordenadas if col in df_mostrar.columns]
         df_mostrar = df_mostrar[columnas_finales]
 
-        # 2. Buscador 100% en español
-        texto_busqueda = st.text_input("🔍 Buscar en este catálogo (Ej: Baliarda, Richmond o 500mg):", placeholder="Escribe aquí para filtrar...")
+        texto_busqueda = st.text_input("🔍 Buscador de medicamentos:", placeholder="Escribe aquí para filtrar la tabla...")
 
         if texto_busqueda:
             mask = df_mostrar.astype(str).apply(lambda x: x.str.contains(texto_busqueda, case=False)).any(axis=1)
@@ -230,10 +212,9 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
         else:
             df_filtrado = df_mostrar
 
-        # 3. Tabla optimizada con altura máxima
         st.dataframe(
             df_filtrado,
-            height=350,
+            height=140, # ALTO REDUCIDO: Muestra aprox 3 filas y fuerza el scroll interno
             width="stretch",
             hide_index=True
         )
@@ -243,12 +224,11 @@ if os_seleccionada != "-" and droga_seleccionada != "-":
             lista = "\n".join(f"• {r}" for r in requisitos)
             st.info(f"📋 **Requisitos de Auditoría:**\n\n{lista}")
 
-        st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")  
-        
+        st.caption(f"📅 **Última actualización de catálogo:** {resultado['Fecha de Carga'].max()}")
 
-    st.divider()
+st.divider()
 
-st.subheader("⚠️ Alertas ANMAT Activas")
+st.subheader("⚠️ Alertas ANMAT")
 df_alertas = cargar_alertas_anmat()
 if df_alertas.empty:
     st.info("No hay alertas de ANMAT registradas actualmente.")
