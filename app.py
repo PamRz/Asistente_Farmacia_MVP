@@ -48,7 +48,7 @@ def agregar_fondo(ruta_imagen):
         pass # Si no encuentra la imagen, la app sigue funcionando normal sin romperse
 
 # Aplicamos el fondo usando nuestra ruta absoluta indestructible
-RUTA_FONDO = Path(__file__).resolve().parent / "fondo.jpeg"
+RUTA_FONDO = Path(__file__).resolve().parent / "fondoaqua.jpg"
 agregar_fondo(RUTA_FONDO)
 
 
