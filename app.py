@@ -10,7 +10,7 @@ DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
 # Links a los vademécums oficiales
 VADEMECUMS = {
     "IOMA": "https://sistemas.ioma.gba.gov.ar/vademecum/",
-    "PAMI": "https://www.pami.org.ar/vademecum",
+    "PAMI": "https://datos.pami.org.ar/dataset/medicamentos-para-afiliados/archivo/92ad6862-af8e-4047-b2cb-4bfef705feb3?view_id=27ad8972-05b6-47b5-9236-c2d8cc2bbd2d",
 }
 
 # Tipo de alerta -> (función de Streamlit, ícono)
