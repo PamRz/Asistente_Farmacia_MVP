@@ -3,8 +3,26 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 
-# CORRECCIÓN DE RUTA: Como el archivo está en la raíz, usamos solo un .parent
+# CORRECCIÓN DE RUTA
 DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
+
+# ==========================================
+# AUTO-MIGRACIÓN DE BASE DE DATOS
+# ==========================================
+# Agrega la columna 'estado' a alerta_anmat si no existe para permitir la Papelera
+try:
+    conn_mig = sqlite3.connect(DB_PATH)
+    cur_mig = conn_mig.cursor()
+    cur_mig.execute("PRAGMA table_info(alerta_anmat)")
+    cols = [col[1] for col in cur_mig.fetchall()]
+    if 'estado' not in cols:
+        cur_mig.execute("ALTER TABLE alerta_anmat ADD COLUMN estado TEXT DEFAULT 'activo'")
+        conn_mig.commit()
+except Exception as e:
+    print(f"Error en migración: {e}")
+finally:
+    conn_mig.close()
+# ==========================================
 
 # Configuración de esta página
 st.set_page_config(page_title="Panel de Control Local", page_icon="⚙️", layout="wide")
@@ -73,6 +91,7 @@ with tab1:
     st.subheader("🗑️ Gestionar Boletines Activos y Borradores")
     
     conn_boletines = sqlite3.connect(DB_PATH)
+    # Filtramos para NO ver los eliminados en la tabla principal
     df_boletines = pd.read_sql_query("""
         SELECT b.id_boletin AS 'ID', o.nombre_os AS 'Obra Social', 
                COALESCE(m.nombre_droga, 'GENERAL') AS 'Alcance / Droga',
@@ -81,99 +100,128 @@ with tab1:
         FROM boletin_os b 
         JOIN obra_social o ON b.id_obra_social = o.id_obra_social
         LEFT JOIN medicamento m ON b.id_medicamento = m.id_medicamento
+        WHERE b.estado != 'eliminado'
     """, conn_boletines)
-    conn_boletines.close()
     
     if df_boletines.empty:
-        st.info("No hay boletines registrados.")
+        st.info("No hay boletines activos ni en borrador.")
     else:
         st.dataframe(df_boletines, width="stretch", hide_index=True)
         
         opciones_id = ["-"] + df_boletines['ID'].astype(str).tolist()
         
-        st.markdown("### 🗑️ Eliminar Boletín")
+        st.markdown("### 🗑️ Mover Boletín a la Papelera")
         col1, col2, col3 = st.columns([2, 2, 2])
         
         with col1:
-            id_eliminar = st.selectbox("Selecciona el ID a eliminar:", options=opciones_id)
+            id_eliminar = st.selectbox("Selecciona el ID a enviar a papelera:", options=opciones_id, key="del_bol_sel")
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            seguro_borrar = st.checkbox("Confirmar borrado", key="chk_boletin")
+            seguro_borrar = st.checkbox("Confirmar envío a papelera", key="chk_boletin")
         with col3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ Eliminar Definitivamente", disabled=(id_eliminar == "-" or not seguro_borrar)):
+            if st.button("🗑️ Enviar a Papelera", key="btn_papelera_bol", disabled=(id_eliminar == "-" or not seguro_borrar)):
                 try:
                     conn_del = sqlite3.connect(DB_PATH)
                     conn_del.execute("PRAGMA foreign_keys = ON")
                     cursor = conn_del.cursor()
-                    cursor.execute("DELETE FROM boletin_os WHERE id_boletin = ?", (id_eliminar,))
+                    # Borrado Lógico: Update estado a 'eliminado'
+                    cursor.execute("UPDATE boletin_os SET estado = 'eliminado' WHERE id_boletin = ?", (id_eliminar,))
                     conn_del.commit()
                     
                     if cursor.rowcount > 0:
-                        st.success(f"✅ Boletín {id_eliminar} eliminado. (Presiona F5 para refrescar la tabla)")
+                        st.success(f"✅ Boletín {id_eliminar} movido a la papelera. (Presiona F5 para refrescar)")
                     else:
                         st.warning("El ID no existía.")
                 except Exception as e:
-                    st.error(f"Error al eliminar: {e}")
+                    st.error(f"Error al mover a papelera: {e}")
                 finally:
                     conn_del.close()
- 
-# --------------------------------------------------------
-# NUEVO: SECCIÓN DE EDICIÓN DE BOLETINES (PUNTO F)
-# --------------------------------------------------------
-st.divider()
-st.markdown("### ✏️ Editar Boletín Existente")
-            
-        # Reutilizamos la lista opciones_id que ya creamos arriba
-id_editar = st.selectbox("Selecciona el ID a editar:", options=opciones_id, key="sel_editar_bol")
-            
-if id_editar != "-":
-            # Extraemos los datos actuales de ese boletín desde el DataFrame que ya tenemos en memoria
-     bol_actual = df_boletines[df_boletines['ID'] == int(id_editar)].iloc[0]
-            
-     with st.form("form_editar_boletin"):
-         st.info(f"Modificando normativas para: **{bol_actual['Obra Social']} ({bol_actual['Alcance / Droga']})**")
-                
-                # Pre-cargamos los valores actuales para que no tengas que escribir todo de nuevo
-         tipos_alerta = ["informativa", "advertencia", "critica"]
-         idx_alerta = tipos_alerta.index(bol_actual['Alerta']) if bol_actual['Alerta'] in tipos_alerta else 0
-         nuevo_tipo = st.selectbox("Nivel de Alerta:", options=tipos_alerta, index=idx_alerta)
-                
-         estados = ["borrador", "activo"]
-         idx_estado = estados.index(bol_actual['Estado']) if bol_actual['Estado'] in estados else 0
-         nuevo_estado = st.radio("Estado de publicación:", options=estados, index=idx_estado, horizontal=True)
-                
-         nuevo_mensaje = st.text_area("Mensaje de la normativa:", value=bol_actual['Mensaje'])
-                
-         if st.form_submit_button("💾 Guardar Cambios"):
-             if nuevo_mensaje.strip() == "":
+
+        # --- SECCIÓN DE EDICIÓN DE BOLETINES ---
+        st.divider()
+        st.markdown("### ✏️ Editar Boletín Existente")
+        id_editar = st.selectbox("Selecciona el ID a editar:", options=opciones_id, key="sel_editar_bol")
+                    
+        if id_editar != "-":
+            bol_actual = df_boletines[df_boletines['ID'] == int(id_editar)].iloc[0]
+                    
+            with st.form("form_editar_boletin"):
+                st.info(f"Modificando normativas para: **{bol_actual['Obra Social']} ({bol_actual['Alcance / Droga']})**")
+                tipos_alerta = ["informativa", "advertencia", "critica"]
+                idx_alerta = tipos_alerta.index(bol_actual['Alerta']) if bol_actual['Alerta'] in tipos_alerta else 0
+                nuevo_tipo = st.selectbox("Nivel de Alerta:", options=tipos_alerta, index=idx_alerta)
+                        
+                estados = ["borrador", "activo"]
+                idx_estado = estados.index(bol_actual['Estado']) if bol_actual['Estado'] in estados else 0
+                nuevo_estado = st.radio("Estado de publicación:", options=estados, index=idx_estado, horizontal=True)
+                        
+                nuevo_mensaje = st.text_area("Mensaje de la normativa:", value=bol_actual['Mensaje'])
+                        
+                if st.form_submit_button("💾 Guardar Cambios"):
+                    if nuevo_mensaje.strip() == "":
                         st.error("El mensaje no puede estar vacío.")
-             else:
-                 try:
-                     conn_upd = sqlite3.connect(DB_PATH)
-                     conn_upd.execute("PRAGMA foreign_keys = ON")
-                     cursor_upd = conn_upd.cursor()
-                     cursor_upd.execute("""
-                         UPDATE boletin_os 
-                         SET tipo_alerta = ?, estado = ?, mensaje = ?
-                         WHERE id_boletin = ?
-                         """, (nuevo_tipo, nuevo_estado, nuevo_mensaje, id_editar))
-                     conn_upd.commit()
-                            
-                     if cursor_upd.rowcount > 0:
-                                st.success(f"✅ ¡Boletín {id_editar} actualizado! (Presiona F5 para ver los cambios)")
-                     else:
+                    else:
+                        try:
+                            conn_upd = sqlite3.connect(DB_PATH)
+                            conn_upd.execute("PRAGMA foreign_keys = ON")
+                            cursor_upd = conn_upd.cursor()
+                            cursor_upd.execute("""
+                                UPDATE boletin_os 
+                                SET tipo_alerta = ?, estado = ?, mensaje = ?
+                                WHERE id_boletin = ?
+                            """, (nuevo_tipo, nuevo_estado, nuevo_mensaje, id_editar))
+                            conn_upd.commit()
+                                    
+                            if cursor_upd.rowcount > 0:
+                                st.success(f"✅ ¡Boletín {id_editar} actualizado! (Presiona F5)")
+                            else:
                                 st.error("No se pudo actualizar el registro.")
-                 except Exception as e:
-                            st.error(f"Error en la base de datos: {e}")
-                 finally:
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                        finally:
                             conn_upd.close()
 
+    # --- PAPELERA DE RECICLAJE BOLETINES ---
+    st.divider()
+    with st.expander("♻️ Abrir Papelera de Reciclaje (Boletines)", expanded=False):
+        df_papelera_bol = pd.read_sql_query("""
+            SELECT b.id_boletin AS 'ID', o.nombre_os AS 'Obra Social', 
+                   COALESCE(m.nombre_droga, 'GENERAL') AS 'Alcance / Droga',
+                   b.mensaje AS 'Mensaje'
+            FROM boletin_os b 
+            JOIN obra_social o ON b.id_obra_social = o.id_obra_social
+            LEFT JOIN medicamento m ON b.id_medicamento = m.id_medicamento
+            WHERE b.estado = 'eliminado'
+        """, conn_boletines)
+        
+        if df_papelera_bol.empty:
+            st.info("La papelera de boletines está vacía.")
+        else:
+            st.table(df_papelera_bol)
+            opciones_restaurar_bol = ["-"] + df_papelera_bol['ID'].astype(str).tolist()
+            col_r1, col_r2 = st.columns([2, 2])
+            with col_r1:
+                id_restaurar_bol = st.selectbox("ID a Restaurar:", options=opciones_restaurar_bol, key="sel_rest_bol")
+            with col_r2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("♻️ Restaurar Boletín (a Borrador)", disabled=(id_restaurar_bol == "-")):
+                    try:
+                        conn_res = sqlite3.connect(DB_PATH)
+                        cur_res = conn_res.cursor()
+                        cur_res.execute("UPDATE boletin_os SET estado = 'borrador' WHERE id_boletin = ?", (id_restaurar_bol,))
+                        conn_res.commit()
+                        st.success(f"✅ Boletín {id_restaurar_bol} restaurado como borrador. (Presiona F5)")
+                    except Exception as e:
+                        st.error(f"Error al restaurar: {e}")
+                    finally:
+                        conn_res.close()
+    
+    conn_boletines.close()
 
 # ==========================================
 # PESTAÑA 2: CATÁLOGO DE MEDICAMENTOS
 # ==========================================
-
 with tab2:
     st.subheader("💊 Base de Datos: Reglas de Validación y Catálogo")
     conn_cat = sqlite3.connect(DB_PATH)
@@ -188,7 +236,6 @@ with tab2:
     """, conn_cat)
     conn_cat.close()
     
-    # La idea de VS Code, pero aplicada correctamente con if/else
     if df_catalogo.empty:
         st.info("No hay reglas de validación registradas en el catálogo.")
     else:
@@ -210,15 +257,12 @@ with tab3:
         with col_a2:
             nuevo_vencimiento = st.text_input("Vencimiento:", placeholder="Ej: N/A o SEP-26")
             
-        # NUEVO CAMPO: Agregamos el motivo que pide la base de datos
         nuevo_motivo = st.text_input("Motivo de la alerta:", placeholder="Ej: Baja definitiva de habilitación del laboratorio")
-            
         nueva_accion = st.text_area("Acción Requerida:", placeholder="Ej: Abstenerse de usar y dispensar cualquier producto de la firma.")
         
         btn_guardar_anmat = st.form_submit_button("Guardar Alerta ANMAT")
         
         if btn_guardar_anmat:
-            # Ahora validamos también que el motivo no esté vacío
             if nuevo_producto.strip() == "" or nueva_accion.strip() == "" or nuevo_motivo.strip() == "":
                 st.error("❌ Los campos 'Producto', 'Motivo' y 'Acción Requerida' son obligatorios.")
             else:
@@ -226,10 +270,9 @@ with tab3:
                     conn_anmat_ins = sqlite3.connect(DB_PATH)
                     conn_anmat_ins.execute("PRAGMA foreign_keys = ON")
                     cursor_ins = conn_anmat_ins.cursor()
-                    # Agregamos "motivo" al INSERT
                     cursor_ins.execute("""
-                        INSERT INTO alerta_anmat (producto, lote, vencimiento, motivo, accion_requerida)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO alerta_anmat (producto, lote, vencimiento, motivo, accion_requerida, estado)
+                        VALUES (?, ?, ?, ?, ?, 'activo')
                     """, (nuevo_producto, nuevo_lote, nuevo_vencimiento, nuevo_motivo, nueva_accion))
                     conn_anmat_ins.commit()
                     st.success("✅ ¡Alerta ANMAT guardada exitosamente! (Presiona F5 para refrescar la tabla)")
@@ -239,12 +282,17 @@ with tab3:
                     conn_anmat_ins.close()
 
     st.divider()
-    st.subheader("⚠️ Base de Datos: Alertas Sanitarias ANMAT")
+    st.subheader("⚠️ Base de Datos: Alertas Sanitarias ANMAT Activas")
     
     conn_anmat = sqlite3.connect(DB_PATH)
-    # Agregamos "motivo" al SELECT para verlo en la tabla
-    df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', vencimiento AS 'Vencimiento', motivo AS 'Motivo', accion_requerida AS 'Acción Requerida' FROM alerta_anmat", conn_anmat)
-    conn_anmat.close()
+    # Filtramos para no ver las eliminadas
+    df_anmat = pd.read_sql_query("""
+        SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', 
+               vencimiento AS 'Vencimiento', motivo AS 'Motivo', 
+               accion_requerida AS 'Acción Requerida', estado AS 'Estado' 
+        FROM alerta_anmat
+        WHERE estado != 'eliminado'
+    """, conn_anmat)
     
     if df_anmat.empty:
         st.info("No hay alertas de ANMAT registradas actualmente.")
@@ -253,37 +301,37 @@ with tab3:
         
         opciones_id_anmat = ["-"] + df_anmat['ID'].astype(str).tolist()
         
-        # --- ELIMINAR ANMAT ---
-        st.markdown("### 🗑️ Eliminar Alerta ANMAT")
+        # --- ELIMINAR ANMAT (BORRADO LÓGICO) ---
+        st.markdown("### 🗑️ Mover Alerta ANMAT a Papelera")
         col_del1, col_del2, col_del3 = st.columns([2, 2, 2])
         
         with col_del1:
             id_eliminar_anmat = st.selectbox("Selecciona el ID a eliminar:", options=opciones_id_anmat, key="del_anmat_sel")
         with col_del2:
             st.markdown("<br>", unsafe_allow_html=True)
-            seguro_borrar_anmat = st.checkbox("Confirmar borrado", key="chk_anmat")
+            seguro_borrar_anmat = st.checkbox("Confirmar envío a papelera", key="chk_anmat")
         with col_del3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ Eliminar Definitivamente", key="btn_del_anmat", disabled=(id_eliminar_anmat == "-" or not seguro_borrar_anmat)):
+            if st.button("🗑️ Enviar a Papelera", key="btn_del_anmat", disabled=(id_eliminar_anmat == "-" or not seguro_borrar_anmat)):
                 try:
-                    conn_del = sqlite3.connect(DB_PATH)
-                    conn_del.execute("PRAGMA foreign_keys = ON")
-                    cur_del = conn_del.cursor()
-                    cur_del.execute("DELETE FROM alerta_anmat WHERE id_alerta = ?", (id_eliminar_anmat,))
-                    conn_del.commit()
-                    if cur_del.rowcount > 0:
-                        st.success(f"✅ Alerta {id_eliminar_anmat} eliminada. (Presiona F5)")
+                    conn_del_a = sqlite3.connect(DB_PATH)
+                    conn_del_a.execute("PRAGMA foreign_keys = ON")
+                    cur_del_a = conn_del_a.cursor()
+                    # Borrado Lógico: Update estado a 'eliminado'
+                    cur_del_a.execute("UPDATE alerta_anmat SET estado = 'eliminado' WHERE id_alerta = ?", (id_eliminar_anmat,))
+                    conn_del_a.commit()
+                    if cur_del_a.rowcount > 0:
+                        st.success(f"✅ Alerta {id_eliminar_anmat} enviada a papelera. (Presiona F5)")
                     else:
                         st.warning("El ID no existía.")
                 except Exception as e:
                     st.error(f"Error al eliminar: {e}")
                 finally:
-                    conn_del.close()
+                    conn_del_a.close()
                     
         # --- EDITAR ANMAT ---
         st.divider()
         st.markdown("### ✏️ Editar Alerta ANMAT Existente")
-        
         id_editar_anmat = st.selectbox("Selecciona el ID a editar:", options=opciones_id_anmat, key="edit_anmat_sel")
         
         if id_editar_anmat != "-":
@@ -299,7 +347,6 @@ with tab3:
                 with col_upd2:
                     upd_venc = st.text_input("Vencimiento:", value=alerta_actual['Vencimiento'])
                 
-                # Agregamos Motivo en la edición
                 upd_motivo = st.text_input("Motivo:", value=alerta_actual['Motivo'])    
                 upd_accion = st.text_area("Acción Requerida:", value=alerta_actual['Acción Requerida'])
                 
@@ -308,22 +355,55 @@ with tab3:
                         st.error("Producto, Motivo y Acción Requerida son obligatorios.")
                     else:
                         try:
-                            conn_upd = sqlite3.connect(DB_PATH)
-                            conn_upd.execute("PRAGMA foreign_keys = ON")
-                            cur_upd = conn_upd.cursor()
-                            # Agregamos "motivo = ?" al UPDATE
-                            cur_upd.execute("""
+                            conn_upd_a = sqlite3.connect(DB_PATH)
+                            conn_upd_a.execute("PRAGMA foreign_keys = ON")
+                            cur_upd_a = conn_upd_a.cursor()
+                            cur_upd_a.execute("""
                                 UPDATE alerta_anmat 
                                 SET producto = ?, lote = ?, vencimiento = ?, motivo = ?, accion_requerida = ?
                                 WHERE id_alerta = ?
                             """, (upd_producto, upd_lote, upd_venc, upd_motivo, upd_accion, id_editar_anmat))
-                            conn_upd.commit()
-                            if cur_upd.rowcount > 0:
-                                st.success(f"✅ Alerta {id_editar_anmat} actualizada exitosamente. (Presiona F5 para refrescar)")
+                            conn_upd_a.commit()
+                            if cur_upd_a.rowcount > 0:
+                                st.success(f"✅ Alerta {id_editar_anmat} actualizada exitosamente. (Presiona F5)")
                         except Exception as e:
                             st.error(f"Error: {e}")
                         finally:
-                            conn_upd.close()
+                            conn_upd_a.close()
+
+    # --- PAPELERA DE RECICLAJE ANMAT ---
+    st.divider()
+    with st.expander("♻️ Abrir Papelera de Reciclaje (ANMAT)", expanded=False):
+        df_papelera_anmat = pd.read_sql_query("""
+            SELECT id_alerta AS 'ID', producto AS 'Producto', motivo AS 'Motivo'
+            FROM alerta_anmat
+            WHERE estado = 'eliminado'
+        """, conn_anmat)
+        
+        if df_papelera_anmat.empty:
+            st.info("La papelera de ANMAT está vacía.")
+        else:
+            st.table(df_papelera_anmat)
+            op_restaurar_anmat = ["-"] + df_papelera_anmat['ID'].astype(str).tolist()
+            col_ra1, col_ra2 = st.columns([2, 2])
+            with col_ra1:
+                id_restaurar_anmat = st.selectbox("ID a Restaurar:", options=op_restaurar_anmat, key="sel_rest_anmat")
+            with col_ra2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("♻️ Restaurar Alerta (a Activo)", key="btn_rest_anmat", disabled=(id_restaurar_anmat == "-")):
+                    try:
+                        conn_res_a = sqlite3.connect(DB_PATH)
+                        cur_res_a = conn_res_a.cursor()
+                        cur_res_a.execute("UPDATE alerta_anmat SET estado = 'activo' WHERE id_alerta = ?", (id_restaurar_anmat,))
+                        conn_res_a.commit()
+                        st.success(f"✅ Alerta {id_restaurar_anmat} restaurada. (Presiona F5)")
+                    except Exception as e:
+                        st.error(f"Error al restaurar: {e}")
+                    finally:
+                        conn_res_a.close()
+
+    conn_anmat.close()
+
 # ==========================================
 # PESTAÑA 4: SIMULADOR DE MOSTRADOR
 # ==========================================
@@ -350,6 +430,7 @@ with tab4:
         
     if os_simulada != "-" and droga_simulada != "-":
         cursor_sim = conn_sim.cursor()
+        # Modificado para que el simulador ignore los eliminados
         cursor_sim.execute("""
             SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia, b.estado, m.nombre_droga 
             FROM boletin_os b
@@ -357,6 +438,7 @@ with tab4:
             LEFT JOIN medicamento m ON b.id_medicamento = m.id_medicamento
             WHERE o.nombre_os = ? 
               AND (m.nombre_droga = ? OR b.id_medicamento IS NULL)
+              AND b.estado != 'eliminado'
         """, (os_simulada, droga_simulada))
         
         boletines_sim = cursor_sim.fetchall()

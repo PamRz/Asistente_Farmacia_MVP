@@ -42,7 +42,7 @@ def consultar_df(sql, params=()):
         conn.execute("PRAGMA foreign_keys = ON")
         return pd.read_sql_query(sql, conn, params=params)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=10)
 def cargar_datos():
     return consultar_df("""
         SELECT
@@ -73,8 +73,8 @@ def cargar_alertas_anmat():
             motivo AS 'Motivo del Retiro', 
             accion_requerida AS 'Instrucción al Mostrador' 
         FROM alerta_anmat
+        WHERE estado = 'activo'
     """)
-
 def obtener_boletines_activos(nombre_os, nombre_droga):
     return consultar("""
         SELECT b.tipo_alerta, b.mensaje, b.fecha_vigencia, m.nombre_droga
