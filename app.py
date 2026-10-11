@@ -46,6 +46,12 @@ header[data-testid="stHeader"] {
 </style>
 """, unsafe_allow_html=True)
 
+st.title("📝 FarmaCheck")
+st.warning(
+    "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
+    "La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva "
+    "del profesional de mostrador."
+)
 # ==========================================
 # ACCESO A DATOS
 # ==========================================
