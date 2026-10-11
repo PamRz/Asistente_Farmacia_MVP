@@ -198,7 +198,44 @@ with tab2:
 # PESTAÑA 3: ALERTAS ANMAT
 # ==========================================
 with tab3:
+    st.subheader("➕ Agregar Nueva Alerta ANMAT")
+    
+    with st.form("form_nueva_anmat"):
+        st.info("Ingresa los datos del producto retirado o con advertencia sanitaria.")
+        nuevo_producto = st.text_input("Producto (Marca, Genérico y Presentación):", placeholder="Ej: Solución Isotónica de Cloruro de Sodio 0,9% - Rivero")
+        
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            nuevo_lote = st.text_input("Lote(s) afectado(s):", placeholder="Ej: 70413108, 70416108 o Todos los lotes")
+        with col_a2:
+            nuevo_vencimiento = st.text_input("Vencimiento:", placeholder="Ej: N/A o SEP-26")
+            
+        nueva_accion = st.text_area("Acción Requerida:", placeholder="Ej: Abstenerse de usar y dispensar cualquier producto de la firma.")
+        
+        btn_guardar_anmat = st.form_submit_button("Guardar Alerta ANMAT")
+        
+        if btn_guardar_anmat:
+            if nuevo_producto.strip() == "" or nueva_accion.strip() == "":
+                st.error("❌ Los campos 'Producto' y 'Acción Requerida' son obligatorios.")
+            else:
+                try:
+                    conn_anmat_ins = sqlite3.connect(DB_PATH)
+                    conn_anmat_ins.execute("PRAGMA foreign_keys = ON")
+                    cursor_ins = conn_anmat_ins.cursor()
+                    cursor_ins.execute("""
+                        INSERT INTO alerta_anmat (producto, lote, vencimiento, accion_requerida)
+                        VALUES (?, ?, ?, ?)
+                    """, (nuevo_producto, nuevo_lote, nuevo_vencimiento, nueva_accion))
+                    conn_anmat_ins.commit()
+                    st.success("✅ ¡Alerta ANMAT guardada exitosamente! (Presiona F5 para refrescar la tabla)")
+                except Exception as e:
+                    st.error(f"Error de base de datos: {e}")
+                finally:
+                    conn_anmat_ins.close()
+
+    st.divider()
     st.subheader("⚠️ Base de Datos: Alertas Sanitarias ANMAT")
+    
     conn_anmat = sqlite3.connect(DB_PATH)
     df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', vencimiento AS 'Vencimiento', accion_requerida AS 'Acción Requerida' FROM alerta_anmat", conn_anmat)
     conn_anmat.close()
@@ -210,32 +247,74 @@ with tab3:
         
         opciones_id_anmat = ["-"] + df_anmat['ID'].astype(str).tolist()
         
-        st.markdown("### 🗑️ Eliminar Alerta Duplicada / Obsoleta")
-        col1, col2, col3 = st.columns([2, 2, 2])
+        # --- ELIMINAR ANMAT ---
+        st.markdown("### 🗑️ Eliminar Alerta ANMAT")
+        col_del1, col_del2, col_del3 = st.columns([2, 2, 2])
         
-        with col1:
+        with col_del1:
             id_eliminar_anmat = st.selectbox("Selecciona el ID a eliminar:", options=opciones_id_anmat, key="del_anmat_sel")
-        with col2:
+        with col_del2:
             st.markdown("<br>", unsafe_allow_html=True)
             seguro_borrar_anmat = st.checkbox("Confirmar borrado", key="chk_anmat")
-        with col3:
+        with col_del3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ Eliminar Definitivamente", key="btn_del_definitivo_anmat", disabled=(id_eliminar_anmat == "-" or not seguro_borrar_anmat)):
+            if st.button("🗑️ Eliminar Definitivamente", key="btn_del_anmat", disabled=(id_eliminar_anmat == "-" or not seguro_borrar_anmat)):
                 try:
-                    conn_del_anmat = sqlite3.connect(DB_PATH)
-                    conn_del_anmat.execute("PRAGMA foreign_keys = ON")
-                    cursor_anmat = conn_del_anmat.cursor()
-                    cursor_anmat.execute("DELETE FROM alerta_anmat WHERE id_alerta = ?", (id_eliminar_anmat,))
-                    conn_del_anmat.commit()
-                    
-                    if cursor_anmat.rowcount > 0:
-                        st.success(f"✅ Alerta {id_eliminar_anmat} eliminada. (Presiona F5 para refrescar la tabla)")
+                    conn_del = sqlite3.connect(DB_PATH)
+                    conn_del.execute("PRAGMA foreign_keys = ON")
+                    cur_del = conn_del.cursor()
+                    cur_del.execute("DELETE FROM alerta_anmat WHERE id_alerta = ?", (id_eliminar_anmat,))
+                    conn_del.commit()
+                    if cur_del.rowcount > 0:
+                        st.success(f"✅ Alerta {id_eliminar_anmat} eliminada. (Presiona F5)")
                     else:
                         st.warning("El ID no existía.")
                 except Exception as e:
                     st.error(f"Error al eliminar: {e}")
                 finally:
-                    conn_del_anmat.close()
+                    conn_del.close()
+                    
+        # --- EDITAR ANMAT ---
+        st.divider()
+        st.markdown("### ✏️ Editar Alerta ANMAT Existente")
+        
+        id_editar_anmat = st.selectbox("Selecciona el ID a editar:", options=opciones_id_anmat, key="edit_anmat_sel")
+        
+        if id_editar_anmat != "-":
+            alerta_actual = df_anmat[df_anmat['ID'] == int(id_editar_anmat)].iloc[0]
+            
+            with st.form("form_editar_anmat"):
+                st.info(f"Modificando alerta: **{alerta_actual['Producto']}**")
+                
+                upd_producto = st.text_input("Producto:", value=alerta_actual['Producto'])
+                col_upd1, col_upd2 = st.columns(2)
+                with col_upd1:
+                    upd_lote = st.text_input("Lote:", value=alerta_actual['Lote'])
+                with col_upd2:
+                    upd_venc = st.text_input("Vencimiento:", value=alerta_actual['Vencimiento'])
+                    
+                upd_accion = st.text_area("Acción Requerida:", value=alerta_actual['Acción Requerida'])
+                
+                if st.form_submit_button("💾 Guardar Cambios"):
+                    if upd_producto.strip() == "" or upd_accion.strip() == "":
+                        st.error("Producto y Acción Requerida son obligatorios.")
+                    else:
+                        try:
+                            conn_upd = sqlite3.connect(DB_PATH)
+                            conn_upd.execute("PRAGMA foreign_keys = ON")
+                            cur_upd = conn_upd.cursor()
+                            cur_upd.execute("""
+                                UPDATE alerta_anmat 
+                                SET producto = ?, lote = ?, vencimiento = ?, accion_requerida = ?
+                                WHERE id_alerta = ?
+                            """, (upd_producto, upd_lote, upd_venc, upd_accion, id_editar_anmat))
+                            conn_upd.commit()
+                            if cur_upd.rowcount > 0:
+                                st.success(f"✅ Alerta {id_editar_anmat} actualizada exitosamente. (Presiona F5 para refrescar)")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                        finally:
+                            conn_upd.close()
 
 # ==========================================
 # PESTAÑA 4: SIMULADOR DE MOSTRADOR
@@ -293,3 +372,5 @@ with tab4:
         else:
             st.success(f"No hay normativas registradas para {os_simulada} y {droga_simulada}.")
     conn_sim.close()
+
+#para abrirlo: python -m streamlit run panel_local.py
