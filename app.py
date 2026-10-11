@@ -65,9 +65,15 @@ def cargar_datos():
     """)
 
 def cargar_alertas_anmat():
-    return consultar_df(
-        "SELECT producto, lote, vencimiento, accion_requerida FROM alerta_anmat"
-    )
+    return consultar_df("""
+        SELECT 
+            producto AS 'Producto', 
+            lote AS 'Lote(s)', 
+            vencimiento AS 'Vencimiento', 
+            motivo AS 'Motivo del Retiro', 
+            accion_requerida AS 'Instrucción al Mostrador' 
+        FROM alerta_anmat
+    """)
 
 def obtener_boletines_activos(nombre_os, nombre_droga):
     return consultar("""
