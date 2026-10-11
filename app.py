@@ -3,9 +3,10 @@ from contextlib import closing
 import pandas as pd
 import streamlit as st
 from pathlib import Path
-import base64  # <-- NUEVA LIBRERÍA PARA LEER LA IMAGEN
 
-# Ruta absoluta indestructible
+
+# Ruta  independiente del sistema operativo para la base de datos
+
 DB_PATH = Path(__file__).resolve().parent / "asistente_farmacia.db"
 
 # Links a los vademécums oficiales
@@ -21,7 +22,7 @@ ESTILOS_ALERTA = {
     "advertencia": (st.warning, "⚠️"),
 }
 
-# 1. CAMBIO DE IDENTIDAD (Planilla con lápiz)
+#  Configuración de la página
 st.set_page_config(page_title="FarmaCheck", page_icon="📝", layout="wide")
 st.title("📝 FarmaCheck")
 st.warning(
@@ -166,7 +167,7 @@ with col_izq:
     if url_vademecum:
         st.link_button(f"🔗 Verificar en el Vademécum Oficial de {os_seleccionada}", url_vademecum)
 
-# 1. Cargamos alertas de la OS si hay una búsqueda activa
+#  Cargamos alertas de la OS si hay una búsqueda activa
 if os_seleccionada != "-" and droga_seleccionada != "-":
     boletines = obtener_boletines_activos(os_seleccionada, droga_seleccionada)
     alertas_generales = [(t, m, f) for t, m, f, droga in boletines if not droga]
