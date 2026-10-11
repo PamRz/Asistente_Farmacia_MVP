@@ -210,22 +210,27 @@ with tab3:
         with col_a2:
             nuevo_vencimiento = st.text_input("Vencimiento:", placeholder="Ej: N/A o SEP-26")
             
+        # NUEVO CAMPO: Agregamos el motivo que pide la base de datos
+        nuevo_motivo = st.text_input("Motivo de la alerta:", placeholder="Ej: Baja definitiva de habilitación del laboratorio")
+            
         nueva_accion = st.text_area("Acción Requerida:", placeholder="Ej: Abstenerse de usar y dispensar cualquier producto de la firma.")
         
         btn_guardar_anmat = st.form_submit_button("Guardar Alerta ANMAT")
         
         if btn_guardar_anmat:
-            if nuevo_producto.strip() == "" or nueva_accion.strip() == "":
-                st.error("❌ Los campos 'Producto' y 'Acción Requerida' son obligatorios.")
+            # Ahora validamos también que el motivo no esté vacío
+            if nuevo_producto.strip() == "" or nueva_accion.strip() == "" or nuevo_motivo.strip() == "":
+                st.error("❌ Los campos 'Producto', 'Motivo' y 'Acción Requerida' son obligatorios.")
             else:
                 try:
                     conn_anmat_ins = sqlite3.connect(DB_PATH)
                     conn_anmat_ins.execute("PRAGMA foreign_keys = ON")
                     cursor_ins = conn_anmat_ins.cursor()
+                    # Agregamos "motivo" al INSERT
                     cursor_ins.execute("""
-                        INSERT INTO alerta_anmat (producto, lote, vencimiento, accion_requerida)
-                        VALUES (?, ?, ?, ?)
-                    """, (nuevo_producto, nuevo_lote, nuevo_vencimiento, nueva_accion))
+                        INSERT INTO alerta_anmat (producto, lote, vencimiento, motivo, accion_requerida)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (nuevo_producto, nuevo_lote, nuevo_vencimiento, nuevo_motivo, nueva_accion))
                     conn_anmat_ins.commit()
                     st.success("✅ ¡Alerta ANMAT guardada exitosamente! (Presiona F5 para refrescar la tabla)")
                 except Exception as e:
@@ -237,7 +242,8 @@ with tab3:
     st.subheader("⚠️ Base de Datos: Alertas Sanitarias ANMAT")
     
     conn_anmat = sqlite3.connect(DB_PATH)
-    df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', vencimiento AS 'Vencimiento', accion_requerida AS 'Acción Requerida' FROM alerta_anmat", conn_anmat)
+    # Agregamos "motivo" al SELECT para verlo en la tabla
+    df_anmat = pd.read_sql_query("SELECT id_alerta AS 'ID', producto AS 'Producto', lote AS 'Lote', vencimiento AS 'Vencimiento', motivo AS 'Motivo', accion_requerida AS 'Acción Requerida' FROM alerta_anmat", conn_anmat)
     conn_anmat.close()
     
     if df_anmat.empty:
@@ -292,22 +298,25 @@ with tab3:
                     upd_lote = st.text_input("Lote:", value=alerta_actual['Lote'])
                 with col_upd2:
                     upd_venc = st.text_input("Vencimiento:", value=alerta_actual['Vencimiento'])
-                    
+                
+                # Agregamos Motivo en la edición
+                upd_motivo = st.text_input("Motivo:", value=alerta_actual['Motivo'])    
                 upd_accion = st.text_area("Acción Requerida:", value=alerta_actual['Acción Requerida'])
                 
                 if st.form_submit_button("💾 Guardar Cambios"):
-                    if upd_producto.strip() == "" or upd_accion.strip() == "":
-                        st.error("Producto y Acción Requerida son obligatorios.")
+                    if upd_producto.strip() == "" or upd_accion.strip() == "" or upd_motivo.strip() == "":
+                        st.error("Producto, Motivo y Acción Requerida son obligatorios.")
                     else:
                         try:
                             conn_upd = sqlite3.connect(DB_PATH)
                             conn_upd.execute("PRAGMA foreign_keys = ON")
                             cur_upd = conn_upd.cursor()
+                            # Agregamos "motivo = ?" al UPDATE
                             cur_upd.execute("""
                                 UPDATE alerta_anmat 
-                                SET producto = ?, lote = ?, vencimiento = ?, accion_requerida = ?
+                                SET producto = ?, lote = ?, vencimiento = ?, motivo = ?, accion_requerida = ?
                                 WHERE id_alerta = ?
-                            """, (upd_producto, upd_lote, upd_venc, upd_accion, id_editar_anmat))
+                            """, (upd_producto, upd_lote, upd_venc, upd_motivo, upd_accion, id_editar_anmat))
                             conn_upd.commit()
                             if cur_upd.rowcount > 0:
                                 st.success(f"✅ Alerta {id_editar_anmat} actualizada exitosamente. (Presiona F5 para refrescar)")
@@ -315,7 +324,6 @@ with tab3:
                             st.error(f"Error: {e}")
                         finally:
                             conn_upd.close()
-
 # ==========================================
 # PESTAÑA 4: SIMULADOR DE MOSTRADOR
 # ==========================================
