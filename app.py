@@ -23,29 +23,6 @@ ESTILOS_ALERTA = {
 
 # 1. CAMBIO DE IDENTIDAD (Planilla con lápiz)
 st.set_page_config(page_title="FarmaCheck", page_icon="📝", layout="wide")
-
-# 2. INYECCIÓN CSS PARA AUMENTAR TAMAÑOS Y DAR IDENTIDAD
-st.markdown("""
-<style>
-/* Franja superior decorativa (Color Médico / Turquesa) */
-header[data-testid="stHeader"] {
-    border-top: 6px solid #20c997 !important;
-}
-
-/* Aumentar letra del botón del Vademécum */
-[data-testid="stLinkButton"] p {
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-}
-
-/* Aumentar letra del título de la lista desplegable (Expander) */
-[data-testid="stExpander"] summary p {
-    font-size: 1.15rem !important;
-    font-weight: bold !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("📝 FarmaCheck")
 st.warning(
     "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
