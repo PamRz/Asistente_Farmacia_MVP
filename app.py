@@ -24,42 +24,20 @@ ESTILOS_ALERTA = {
 # 1. CAMBIO DE IDENTIDAD (Planilla con lápiz)
 st.set_page_config(page_title="FarmaCheck", page_icon="📝", layout="wide")
 
-# ==========================================
-# NUEVO: INYECCIÓN DE IMAGEN DE FONDO
-# ==========================================
-def agregar_fondo(ruta_imagen):
-    try:
-        with open(ruta_imagen, "rb") as f:
-            encoded_string = base64.b64encode(f.read()).decode()
-        st.markdown(
-            f"""
-            <style>
-            .stApp {{
-                background-image: url(data:image/jpeg;base64,{encoded_string});
-                background-size: cover;
-                background-position: center;
-                background-attachment: fixed;
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-    except FileNotFoundError:
-        pass # Si no encuentra la imagen, la app sigue funcionando normal sin romperse
-
-# Aplicamos el fondo usando nuestra ruta absoluta indestructible
-RUTA_FONDO = Path(__file__).resolve().parent / "fondoaqua.jpg"
-agregar_fondo(RUTA_FONDO)
-
-
-# 2. INYECCIÓN CSS PARA AUMENTAR TAMAÑOS (Punto 2)
+# 2. INYECCIÓN CSS PARA AUMENTAR TAMAÑOS Y DAR IDENTIDAD
 st.markdown("""
 <style>
+/* Franja superior decorativa (Color Médico / Turquesa) */
+header[data-testid="stHeader"] {
+    border-top: 6px solid #20c997 !important;
+}
+
 /* Aumentar letra del botón del Vademécum */
 [data-testid="stLinkButton"] p {
     font-size: 1.15rem !important;
     font-weight: 600 !important;
 }
+
 /* Aumentar letra del título de la lista desplegable (Expander) */
 [data-testid="stExpander"] summary p {
     font-size: 1.15rem !important;
@@ -67,13 +45,6 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-
-st.title("📝 FarmaCheck")
-st.warning(
-    "⚠️ **Aviso Legal:** Herramienta de consulta preventiva basada en boletines oficiales. "
-    "La validación en el sistema oficial y la dispensa final son responsabilidad exclusiva "
-    "del profesional de mostrador."
-)
 
 # ==========================================
 # ACCESO A DATOS
