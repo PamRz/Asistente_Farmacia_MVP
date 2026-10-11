@@ -200,7 +200,7 @@ with col_der:
         if df_alertas.empty:
             st.info("No hay alertas de ANMAT registradas actualmente.")
         else:
-            st.dataframe(df_alertas, width="stretch", hide_index=True)
+            st.table(df_alertas.style.hide(axis="index"))
 
 # 3. Finalmente, dibujamos la planilla abajo de todo, ocupando el ancho completo
 if os_seleccionada != "-" and droga_seleccionada != "-":
