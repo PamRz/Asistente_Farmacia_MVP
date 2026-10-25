@@ -1,3 +1,7 @@
+# Este script implementa un panel de control local para administrar boletines, alertas ANMAT y el catálogo de medicamentos
+#  en una farmacia. Utiliza Streamlit para la interfaz de usuario y SQLite para la base de datos. 
+# Permite agregar, editar, eliminar (lógicamente) y restaurar registros, así como simular la visualización de alertas según
+#  la obra social y el medicamento seleccionado.
 import streamlit as st
 import sqlite3
 import pandas as pd

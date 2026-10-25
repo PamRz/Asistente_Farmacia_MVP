@@ -1,3 +1,5 @@
+# Este script procesa el Vademécum Detallado de IOMA descargado previamente en formato JSON y lo inserta en la base de datos
+#  SQLite 'asistente_farmacia.db'.
 import json
 import pandas as pd
 import sqlite3

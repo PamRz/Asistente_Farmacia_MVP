@@ -1,8 +1,12 @@
+
+# este script descarga el Vademécum completo de IOMA en formato JSON y lo guarda en un archivo llamado 'ioma_datos.json'
+#  en la carpeta actual. Esto es útil para tener una copia local de los datos del Vademécum para su posterior procesamiento 
+# o análisis.
 import requests
 
 url = "https://sistemas.ioma.gba.gov.ar/vademecum/Home/GetJsonList"
 
-# Simulamos ser tu navegador Firefox con los encabezados que capturaste
+# Simulamos ser  Firefox con los encabezados que capturé
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
     "Accept": "*/*",
